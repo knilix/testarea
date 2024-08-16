@@ -33,4 +33,8 @@ echo "- Folgender Befehl könnte in die 'crontab -e' für ein Update, täglich 0
 echo #
 echo "10 2 * * * /opt/scriptfiles/updatescript.sh >/dev/null 2>&1"
 echo #
+echo "Manueller Startbefehl:"
+echo #
+echo "cd && cd /opt/scriptfiles/ && ./updatescript.sh"
+echo #
 echo #
