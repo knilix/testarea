@@ -1,4 +1,6 @@
 #!/bin/bash
+# Maintener: @knilix
+# Only test
 cd
 #
 apt install bash -y
