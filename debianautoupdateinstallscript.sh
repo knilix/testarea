@@ -20,7 +20,7 @@ cd && cd /opt/scriptfiles
 ./updatescript.sh
 #
 rm -r /opt/scriptfiles/testarea-main
-rm ~/main.zip
+rm /opt/main.zip
 #
 clear
 echo #
