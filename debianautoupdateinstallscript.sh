@@ -1,6 +1,8 @@
 #!/bin/bash
 # Maintener: @knilix
 # Only test
+# Startscript: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/debianautoupdateinstallscript.sh
+# Ausführbefehl: cd /opt/scriptfiles/testarea-main && ./debianautoupdateinstallscript.sh
 cd
 #
 apt install bash -y
