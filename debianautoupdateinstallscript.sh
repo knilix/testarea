@@ -5,8 +5,6 @@
 # Ausführbefehl: cd /opt/scriptfiles/testarea-main && ./debianautoupdateinstallscript.sh
 cd
 #
-apt install bash -y
-#
 mkdir -p /opt/scriptfiles
 touch /opt/scriptfiles/updatescript.sh
 touch /opt/scriptfiles/updatelog.txt
