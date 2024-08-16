@@ -19,3 +19,10 @@ cd && cd /opt/scriptfiles
 #
 rm -r /opt/scriptfiles/testarea-main
 rm ~/main.zip
+#
+echo "updatescript erstellt"
+echo "Nicht mehr benötigte Install-Sachen wieder gelöscht"
+echo "Folgender Befehl kann in die 'crontab -e' am Ende eingefügt werden"
+echo #
+echo "0 2 * * * /opt/scriptfiles/updatescript.sh >/dev/null 2>&1"
+echo #
