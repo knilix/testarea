@@ -27,11 +27,8 @@ echo #
 echo #
 echo "- Das Updatescript wurde erstellt"
 echo "- Nicht mehr benötigte Installationsdateien wieder gelöscht"
-echo "- Folgender Befehl könnte in die 'crontab -e' am Ende eingefügt werden"
+echo "- Folgender Befehl könnte in die 'crontab -e' für ein Update, täglich 02:10 Uhr, am Ende eingefügt werden"
 echo #
 echo "10 2 * * * /opt/scriptfiles/updatescript.sh >/dev/null 2>&1"
 echo #
-echo 'Das Update wäre täglich 02:10 Uhr'
-echo #
-echo "ENDE"
 echo #
