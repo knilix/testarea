@@ -16,7 +16,6 @@ echo 'echo d=$(date +%y-%m-%d_%H:%M:%S) | tee -a /opt/scriptfiles/updatelog.txt'
 echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get dist-upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'new_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
 #
 echo 'new_kernel=$(uname -r)
 #  pruefen, ob sich die Kernel-Version geaendert hat
