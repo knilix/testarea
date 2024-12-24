@@ -10,10 +10,10 @@ touch /opt/scriptfiles/updatescript.sh
 touch /opt/scriptfiles/updatelog.txt
 #
 echo '#!/bin/bash' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'apt-get update -y' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'apt-get upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'echo d=$(date +%y-%m-%d_%H:%M:%S) | tee -a /opt/scriptfiles/updatelog.txt' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'apt-get update -y' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'apt-get upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get dist-upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'new_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
 #
