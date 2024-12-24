@@ -13,6 +13,18 @@ echo '#!/bin/bash' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get update -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'echo d=$(date +%y-%m-%d_%H:%M:%S) | tee -a /opt/scriptfiles/updatelog.txt' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'apt-get dist-upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'new_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
+#
+echo 'new_kernel=$(uname -r)
+#  pruefen, ob sich die Kernel-Version geaendert hat
+if [ "$old_kernel" != "$new_kernel" ]; then
+    reboot
+else
+    exit
+fi'| tee -a /opt/scriptfiles/updatescript.sh
 #
 chmod 700 /opt/scriptfiles/updatescript.sh
 #
