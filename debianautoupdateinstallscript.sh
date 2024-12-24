@@ -15,7 +15,6 @@ echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get update -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
 echo 'apt-get dist-upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'new_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
 #
 echo 'new_kernel=$(uname -r)
 #  pruefen, ob sich die Kernel-Version geaendert hat
