@@ -29,12 +29,15 @@ sudo apt-get install abiword -y
 sudo apt-get install blender -y
 sudo apt-get install kdenlive -y
 sudo apt-get install plasma-workspace-wayland -y
+# Google Chrome Browser
+sudo wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo dpkg -i google-chrome-stable_current_amd64.deb
 # Lutris
 echo "deb [signed-by=/etc/apt/keyrings/lutris.gpg] https://download.opensuse.org/repositories/home:/strycore/Debian_12/ ./" | sudo tee /etc/apt/sources.list.d/lutris.list > /dev/null
 wget -q -O- https://download.opensuse.org/repositories/home:/strycore/Debian_12/Release.key | gpg --dearmor | sudo tee /etc/apt/keyrings/lutris.gpg > /dev/null
 sudo apt-get update
 sudo apt-get install lutris -y
-# Snap-Packete
+# Snap packages
 sudo snap install musicpod
 sudo snap install blue-recorder
 sudo snap install discord
