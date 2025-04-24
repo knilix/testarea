@@ -1,6 +1,25 @@
 #!/bin/bash
 # Maintener: @knilix
 # Only test
+#
+# Preparation: Ubuntu server 24.04 as basic installation and HWE kernel, then a few commands manually:
+###
+# sudo apt update && sudo apt upgrade -y
+# sudo apt install kubuntu-desktop -y
+# sudo apt install language-pack-kde-de -y
+# sudo apt-get remove --purge *nvidia*
+# sudo add-apt-repository ppa:graphics-drivers/ppa
+# sudo apt update && sudo apt install nvidia-driver-570
+# sudo nano /etc/default/grub
+# Search for the following line:
+# GRUB_CMDLINE_LINUX_DEFAULT=""
+# Change to:
+# GRUB_CMDLINE_LINUX_DEFAULT="nvidia-drm.modeset=1"
+# --> Strg-x, y, Enter
+# sudo update-grub
+# sudo reboot
+###
+# And now the script
 # Startscript: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/u_24.04_selfinstallscript.sh
 # Ausführbefehl (einmalig): cd /opt/scriptfiles/testarea-main && ./u_24.04_selfinstallscript.sh
 sudo apt update
@@ -39,6 +58,10 @@ sudo apt autoremove -y
 #
 clear
 echo #
+echo #
+echo "- The script has been executed"
+echo "- Installation files that are no longer required deleted"
+echo "- Reboot system now!"
 echo #
 echo "- Das Script wurde ausgeführt"
 echo "- Nicht mehr benötigte Installationsdateien wieder gelöscht"
