@@ -33,8 +33,8 @@ sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt --fix-broken ins
 # Lutris
 echo "deb [signed-by=/etc/apt/keyrings/lutris.gpg] https://download.opensuse.org/repositories/home:/strycore/Debian_12/ ./" | sudo tee /etc/apt/sources.list.d/lutris.list > /dev/null
 wget -q -O- https://download.opensuse.org/repositories/home:/strycore/Debian_12/Release.key | gpg --dearmor | sudo tee /etc/apt/keyrings/lutris.gpg > /dev/null
-sudo apt-get update
-sudo apt-get install lutris -y
+sudo apt update
+sudo apt install lutris -y
 
 # Snap packages
 snap install musicpod
@@ -43,7 +43,7 @@ snap install discord
 snap install obs-studio
 
 # Flatpak
-sudo apt-get install flatpak -y
+sudo apt install flatpak -y
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install flathub com.usebottles.bottles
 
@@ -51,17 +51,9 @@ flatpak install flathub com.usebottles.bottles
 sudo dpkg --add-architecture i386
 sudo mkdir -pm755 /etc/apt/keyrings
 sudo wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key
-
-# Überprüfen, ob die Wine-Repository-Datei bereits existiert
-if [ ! -f /etc/apt/sources.list.d/winehq-$(lsb_release -c | grep -o '\w*$').sources ]; then
-    sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -c | grep -o '\w*$')/winehq-$(lsb_release -c | grep -o '\w*$').sources"
-    echo "WineHQ Repository wurde hinzugefügt."
-else
-    echo "WineHQ Repository ist bereits vorhanden. Überspringen..."
-fi
-# sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -c | grep -o '\w*$')/winehq-$(lsb_release -c | grep -o '\w*$').sources"
-sudo apt-get update
-sudo apt-get install --install-recommends winehq-devel
+sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$(lsb_release -c | grep -o '\w*$')/winehq-$(lsb_release -c | grep -o '\w*$').sources"
+sudo apt update
+sudo apt install --install-recommends winehq-devel
 
 # Clean up the installation files
 rm -r /opt/scriptfiles/testarea-main
