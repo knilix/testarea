@@ -35,6 +35,8 @@ flatpak install flathub com.usebottles.bottles
 rm -r /opt/scriptfiles/testarea-main
 rm /opt/main.zip
 #
+sudo apt autoremove -y
+#
 clear
 echo #
 echo #
