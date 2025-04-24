@@ -30,6 +30,7 @@ sudo snap install obs-studio
 # Flatpak
 sudo apt-get install flatpak -y
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install flathub com.usebottles.bottles
 #
 rm -r /opt/scriptfiles/testarea-main
 rm /opt/main.zip
