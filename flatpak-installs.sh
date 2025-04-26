@@ -100,13 +100,11 @@ for PACKAGE in "${PACKAGES_TO_INSTALL[@]}"; do
     fi
   fi
 
-  # Flatpak prüfen (falls nötig)
-  if command -v flatpak >/dev/null 2>&1; then
-    if flatpak list | grep -q "$PACKAGE"; then
-      echo "$PACKAGE bereits als Flatpak installiert. Überspringe."
-      skipped_packages+=("$PACKAGE")
-      continue
-    fi
+  # Wenn Snapd nicht installiert ist, überspringen wir es
+  if [ "$PACKAGE" == "snapd" ] && ! command -v snap >/dev/null 2>&1; then
+    echo "Snapd ist nicht installiert. Überspringe Snapd-Installation."
+    skipped_packages+=("$PACKAGE")
+    continue
   fi
 
   # Wenn nichts gefunden, dann installieren
