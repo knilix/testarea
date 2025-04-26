@@ -182,7 +182,7 @@ FLATPAK_APPS=(
 
 for APP in "${FLATPAK_APPS[@]}"; do
   echo "Installiere $APP..."
-  flatpak install -y flathub "$APP"
+  flatpak install -y flathub "$APP" 2> >(grep -v 'dconf-WARNING' >&2)
 done
 
 # 12. Abschlussmeldung
