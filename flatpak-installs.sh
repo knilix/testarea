@@ -152,6 +152,7 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 
 # 8. Flatpak-Apps installieren
 FLATPAK_APPS=(
+  "com.discordapp.Discord"
   "org.gimp.GIMP"
   "com.abisource.AbiWord"
   "org.blender.Blender"
