@@ -4,7 +4,6 @@
 #
 # root user required (su)
 #
-#!/bin/bash
 # 1. Architektur prüfen
 ARCH=$(uname -m)
 if [[ "$ARCH" != "x86_64" ]]; then
@@ -61,7 +60,7 @@ if ! command -v "$PM_BIN" >/dev/null 2>&1; then
 fi
 
 # 5. Feste Paketliste
-PACKAGES_TO_INSTALL=("flatpak")
+PACKAGES_TO_INSTALL=("flatpak" "snapd")
 
 # Listen für Zusammenfassung
 installed_packages=()
@@ -76,21 +75,41 @@ eval "$PM_UPDATE"
 for PACKAGE in "${PACKAGES_TO_INSTALL[@]}"; do
   echo -n "Prüfe Paket $PACKAGE... "
 
-  if [[ "$DISTRO" == "debian" || "$DISTRO" == "ubuntu" ]]; then
-    STATUS=$($PM_QUERY "$PACKAGE" 2>/dev/null || true)
-    if [[ "$STATUS" == "$CHECK_INSTALLED_STATUS" ]]; then
-      echo "bereits installiert. Überspringe."
-      skipped_packages+=("$PACKAGE")
-      continue
-    fi
-  else
-    if $PM_QUERY "$PACKAGE" >/dev/null 2>&1; then
-      echo "bereits installiert. Überspringe."
+  # Überprüfen, ob das Paket bereits mit Snap installiert wurde
+  if command -v snap >/dev/null 2>&1; then
+    if snap list | grep -q "$PACKAGE"; then
+      echo "$PACKAGE bereits als Snap installiert. Überspringe."
       skipped_packages+=("$PACKAGE")
       continue
     fi
   fi
 
+  # Überprüfen, ob das Paket bereits als Native-Paket installiert wurde
+  if [[ "$DISTRO" == "debian" || "$DISTRO" == "ubuntu" ]]; then
+    STATUS=$($PM_QUERY "$PACKAGE" 2>/dev/null || true)
+    if [[ "$STATUS" == "$CHECK_INSTALLED_STATUS" ]]; then
+      echo "bereits als Native-Paket installiert. Überspringe."
+      skipped_packages+=("$PACKAGE")
+      continue
+    fi
+  else
+    if $PM_QUERY "$PACKAGE" >/dev/null 2>&1; then
+      echo "bereits als Native-Paket installiert. Überspringe."
+      skipped_packages+=("$PACKAGE")
+      continue
+    fi
+  fi
+
+  # Flatpak prüfen (falls nötig)
+  if command -v flatpak >/dev/null 2>&1; then
+    if flatpak list | grep -q "$PACKAGE"; then
+      echo "$PACKAGE bereits als Flatpak installiert. Überspringe."
+      skipped_packages+=("$PACKAGE")
+      continue
+    fi
+  fi
+
+  # Wenn nichts gefunden, dann installieren
   echo "nicht installiert. Installiere..."
   if eval "$PM_INSTALL $PACKAGE"; then
     echo "$PACKAGE erfolgreich installiert."
