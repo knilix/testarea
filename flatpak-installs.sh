@@ -8,7 +8,7 @@ sudo apt install flatpak -y
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 #flatpak install flathub org.gimp.GIMP flathub com.abisource.AbiWord flathub org.blender.Blender flathub net.lutris.Lutris flathub org.kde.kdenlive flathub com.obsproject.Studio flathub org.feichtmeier.Musicpod flathub sa.sy.bluerecorder flathub org.flameshot.Flameshot flathub com.usebottles.bottles
 #
-flatpak install \
+flatpak install -y \
   flathub org.gimp.GIMP \
   flathub com.abisource.AbiWord \
   flathub org.blender.Blender \
