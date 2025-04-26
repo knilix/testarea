@@ -31,6 +31,15 @@ RED='\033[1;31m'
 GRAY='\033[1;37m'
 NC='\033[0m' # No Color
 
+# Debug-Modus aktivieren, wenn --debug übergeben wird
+if [[ "$1" == "--debug" ]]; then
+  echo -e "${YELLOW}Debug-Modus aktiv. Zeige alle Befehle.${NC}"
+  set -x
+  DEBUG=true
+else
+  DEBUG=false
+fi
+
 # 1. Architektur prüfen
 ARCH=$(uname -m)
 if [[ "$ARCH" != "x86_64" ]]; then
