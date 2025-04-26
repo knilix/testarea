@@ -8,6 +8,7 @@
 # Vorher erledigen: 
 # - installieren von wget und zip 
 #
+# Es werden mit diesem Script Flatpak und folgende Apps installiert: Discord, Ginp, AbiWord, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles.
 # Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
 # Es wird geprüft of die zu installierenden Flatpak-Apps schon per Snap oder Nativ installiert sind. Wenn ja, wird die Installation der jeweiligen Flatpak-App übersprungen.
 # Warnhinweise, die nur informativ sind und keinerlei Einfluss auf die Funktion der jeweiligen App haben, z.B. weil KDE statt Gnome verwendet wird, werden ausgeblendet.
@@ -18,6 +19,7 @@
 # Do it beforehand:
 # - install wget and zip
 #
+# This script installs Flatpak and the following apps: Discord, Ginp, AbiWord, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles.
 # The system checks whether Flatpak is installed. If not, it is installed.
 # The system checks whether the Flatpak apps to be installed are already installed via Snap or Native. If yes, the installation of the respective Flatpak app is skipped.
 # Warnings that are only informative and have no influence on the function of the respective app, e.g. because KDE is used instead of Gnome, are hidden.
