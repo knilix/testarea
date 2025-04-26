@@ -2,13 +2,15 @@
 # Maintener: @knilix
 # Only test
 #
-# root user required (su)
+# root user benötigt (su)
 #
 # Für Debian, Ubuntu, Arch, Fedora und Alpine geeignet.
 # Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
 # Es wird geprüft of die zu installierenden Flatpak-Apps schon per Snap oder Nativ installiert sind. Wenn ja, wird die Installation der jeweiligen Flatpak-App übersprungen.
 # Warnhinweise, die nur informativ sind und keinerlei Einfluss auf die Funktion der jeweiligen App haben, z.B. weil KDE statt Gnome verwendet wird, werden ausgeblendet.
 #
+#
+# root user required (su)
 #
 # Suitable for Debian, Ubuntu, Arch, Fedora and Alpine.
 # The system checks whether Flatpak is installed. If not, it is installed.
