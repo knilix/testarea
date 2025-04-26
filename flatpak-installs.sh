@@ -205,11 +205,13 @@ done
 rm -r /opt/scriptfiles/testarea-main
 rm /opt/main.zip
 
-clear
+#clear
 
 # 13. Abschlussmeldung
 echo
 echo
 echo "✅ Alle Aufgaben abgeschlossen."
+echo
+echo
 
 exit 0
