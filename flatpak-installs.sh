@@ -1,11 +1,14 @@
 #!/bin/bash
 # Maintener: @knilix
 # Only test
+#
+#sudo apt install flatpak -y
+#flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+#
 # Now the script
 # Startscript: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/flatpak-installs.sh
 # Ausführbefehl (einmalig): cd /opt/scriptfiles/testarea-main && ./flatpak-installs.sh
-sudo apt install flatpak -y
-flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
 #flatpak install flathub org.gimp.GIMP flathub com.abisource.AbiWord flathub org.blender.Blender flathub net.lutris.Lutris flathub org.kde.kdenlive flathub com.obsproject.Studio flathub org.feichtmeier.Musicpod flathub sa.sy.bluerecorder flathub org.flameshot.Flameshot flathub com.usebottles.bottles
 #
 flatpak install -y \
