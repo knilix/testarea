@@ -5,7 +5,6 @@
 # root user required (su)
 #
 #!/bin/bash
-
 # 1. Architektur prüfen
 ARCH=$(uname -m)
 if [[ "$ARCH" != "x86_64" ]]; then
@@ -25,8 +24,8 @@ fi
 # 3. Paketmanager und Befehle bestimmen
 case "$DISTRO" in
   debian|ubuntu)
-    PM_UPDATE="apt update -y"
-    PM_INSTALL="apt install -y"
+    PM_UPDATE="apt update -y 2>/dev/null"
+    PM_INSTALL="apt install -y 2>/dev/null"
     PM_QUERY="dpkg-query -W -f='\${Status}'"
     CHECK_INSTALLED_STATUS="install ok installed"
     ;;
