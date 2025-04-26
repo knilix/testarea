@@ -24,8 +24,6 @@
 # Warnings that are only informative and have no influence on the function of the respective app, e.g. because KDE is used instead of Gnome, are hidden.
 #
 #
-#!/bin/bash
-
 # Farbdefinitionen
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
@@ -122,30 +120,13 @@ esac
 echo -e "${GRAY}Aktualisiere Paketquellen...${NC}"
 eval "$PM_UPDATE"
 
-# 5. Feste Paketliste
-PACKAGES_TO_INSTALL=("flatpak" "snapd")
-
-# Snapd auf FreeBSD überspringen
-if [ "$DISTRO" = "freebsd" ]; then
-  PACKAGES_TO_INSTALL=("flatpak")
-fi
+# 5. Feste Paketliste (nur Flatpak, kein snapd)
+PACKAGES_TO_INSTALL=("flatpak")  # Nur flatpak wird installiert, niemals snapd
 
 # 6. Pakete installieren
 for package in "${PACKAGES_TO_INSTALL[@]}"; do
   echo -e "${GRAY}Prüfe, ob $package installiert ist...${NC}"
   
-  if [ "$package" = "snapd" ] && [ "$DISTRO" = "freebsd" ]; then
-    echo -e "${YELLOW}Snap wird auf FreeBSD nicht unterstützt. Überspringe.${NC}"
-    continue
-  fi
-
-  if [ "$package" = "snapd" ]; then
-    if command -v snap >/dev/null 2>&1; then
-      echo -e "${GREEN}Snap bereits installiert.${NC}"
-      continue
-    fi
-  fi
-
   if [ "$package" = "flatpak" ]; then
     if command -v flatpak >/dev/null 2>&1; then
       echo -e "${GREEN}Flatpak bereits installiert.${NC}"
@@ -198,5 +179,5 @@ rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
 #
 echo
-echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
+echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}
 echo
