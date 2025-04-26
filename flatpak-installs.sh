@@ -179,5 +179,5 @@ rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
 #
 echo
-echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}
+echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
 echo
