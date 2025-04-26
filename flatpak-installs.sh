@@ -199,15 +199,15 @@ echo
 echo "Installiere Flatpak-Anwendungen..."
 
 FLATPAK_APPS=(
-  "org.gimp.GIMP"
-  "com.abisource.AbiWord"
-  "org.blender.Blender"
-  "net.lutris.Lutris"
-  "org.kde.kdenlive"
-  "com.obsproject.Studio"
-  "org.feichtmeier.Musicpod"
-  "sa.sy.bluerecorder"
-  "org.flameshot.Flameshot"
+#  "org.gimp.GIMP"
+#  "com.abisource.AbiWord"
+#  "org.blender.Blender"
+#  "net.lutris.Lutris"
+#  "org.kde.kdenlive"
+#  "com.obsproject.Studio"
+#  "org.feichtmeier.Musicpod"
+#  "sa.sy.bluerecorder"
+#  "org.flameshot.Flameshot"
   "com.usebottles.bottles"
 )
 
