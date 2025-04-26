@@ -66,14 +66,7 @@ if ! command -v "$PM_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
-# 5. Paketnamen prüfen
-if [ $# -eq 0 ]; then
-  echo "Bitte gib mindestens ein Paket an."
-  echo "Beispiel: $0 paket1 paket2 paket3"
-  exit 1
-fi
-
-# Listen für Zusammenfassung
+# 5. Listen für Zusammenfassung
 installed_packages=()
 skipped_packages=()
 failed_packages=()
