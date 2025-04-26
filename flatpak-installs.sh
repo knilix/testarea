@@ -2,6 +2,8 @@
 # Maintener: @knilix
 # Only test
 #
+# root user required (su)
+#
 # 1. Architektur prüfen
 ARCH=$(uname -m)
 if [[ "$ARCH" != "x86_64" ]]; then
@@ -44,9 +46,6 @@ esac
 #
 latpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 #
-# sudo apt install flatpak -y
-# flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-# root user required (su)
 # Now the script
 # Startscript: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/flatpak-installs.sh
 # Ausführbefehl (einmalig): cd /opt/scriptfiles/testarea-main && ./flatpak-installs.sh
