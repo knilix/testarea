@@ -1,10 +1,10 @@
 #!/bin/bash
 # Maintener: @knilix
-# Only test
+# --> Only test - only x64 !
 #
 # root user benötigt (su)
 #
-# Für Debian, Ubuntu, Arch, Fedora, Gentoo und Alpine geeignet.
+# Für Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD und Alpine geeignet.
 # Vorher erledigen: 
 # - installieren von wget und zip 
 #
@@ -15,7 +15,7 @@
 #
 # root user required (su)
 #
-# Suitable for Debian, Ubuntu, Arch, Fedora, Gentoo and Alpine.
+# Suitable for Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD and Alpine.
 # Do it beforehand:
 # - install wget and zip
 #
