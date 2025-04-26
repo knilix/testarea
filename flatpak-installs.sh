@@ -2,6 +2,48 @@
 # Maintener: @knilix
 # Only test
 #
+# 1. Architektur prüfen
+ARCH=$(uname -m)
+if [[ "$ARCH" != "x86_64" ]]; then
+  echo "Nur x64-Architekturen werden unterstützt (aktuell: $ARCH)."
+  exit 1
+fi
+
+# 2. Distribution erkennen
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  DISTRO=$ID
+else
+  echo "Konnte die Distribution nicht erkennen."
+  exit 1
+fi
+
+# 3. Je nach Distribution den Befehl ausführen
+case "$DISTRO" in
+  debian|ubuntu)
+    echo "Debian/Ubuntu erkannt."
+    apt install flatpak -y
+    ;;
+  arch)
+    echo "Arch Linux erkannt."
+    sudo pacman -S flatpak
+    ;;
+  fedora)
+    echo "Fedora erkannt."
+    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    ;;
+  alpine)
+    echo "Alpine Linux erkannt."
+    apk add flatpak
+    ;;
+  *)
+    echo "Distribution $DISTRO wird nicht unterstützt."
+    exit 1
+    ;;
+esac
+#
+latpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+#
 # sudo apt install flatpak -y
 # flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 # root user required (su)
