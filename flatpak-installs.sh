@@ -4,6 +4,8 @@
 #
 # root user required (su)
 #
+#!/bin/bash
+
 # 1. Architektur prüfen
 ARCH=$(uname -m)
 if [[ "$ARCH" != "x86_64" ]]; then
