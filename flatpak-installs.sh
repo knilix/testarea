@@ -27,28 +27,24 @@ case "$DISTRO" in
     PM_INSTALL="apt install -y"
     PM_QUERY="dpkg-query -W -f='\${Status}'"
     CHECK_INSTALLED_STATUS="install ok installed"
-    FLATPAK_INSTALL="apt install flatpak -y"
     ;;
   arch)
     PM_UPDATE="pacman -Sy --noconfirm"
     PM_INSTALL="pacman -S --noconfirm"
     PM_QUERY="pacman -Q"
     CHECK_INSTALLED_STATUS=""
-    FLATPAK_INSTALL="sudo pacman -S flatpak"
     ;;
   fedora)
     PM_UPDATE="dnf makecache"
     PM_INSTALL="dnf install -y"
     PM_QUERY="rpm -q"
     CHECK_INSTALLED_STATUS=""
-    FLATPAK_INSTALL="dnf install flatpak -y"
     ;;
   alpine)
     PM_UPDATE="apk update"
     PM_INSTALL="apk add"
     PM_QUERY="apk info -e"
     CHECK_INSTALLED_STATUS=""
-    FLATPAK_INSTALL="apk add flatpak"
     ;;
   *)
     echo "Distribution $DISTRO wird nicht unterstützt."
@@ -121,50 +117,78 @@ if [ ${#failed_packages[@]} -gt 0 ]; then
 fi
 echo "========================"
 
-# 9. Flatpak Remote und Flatpak-Apps
+# 9. Flatpak-Remote hinzufügen
 echo
 if command -v flatpak >/dev/null 2>&1; then
   echo "Füge Flathub-Remote hinzu (falls noch nicht vorhanden)..."
   flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
-  echo "Installiere Flatpak-Anwendungen..."
-
-  FLATPAK_APPS=(
-    "org.gimp.GIMP"
-    "com.abisource.AbiWord"
-    "org.blender.Blender"
-    "net.lutris.Lutris"
-    "org.kde.kdenlive"
-    "com.obsproject.Studio"
-    "org.feichtmeier.Musicpod"
-    "sa.sy.bluerecorder"
-    "org.flameshot.Flameshot"
-    "com.usebottles.bottles"
-  )
-
-  for APP in "${FLATPAK_APPS[@]}"; do
-    echo "Installiere $APP..."
-    flatpak install -y flathub "$APP"
-  done
-
 else
-  echo "Flatpak konnte nicht installiert werden oder ist nicht verfügbar. Überspringe Flatpak-Anwendungen."
+  echo "Flatpak nicht verfügbar. Kann Flathub-Remote nicht hinzufügen."
+  exit 1
 fi
 
-exit 0
-#
-# Clean up the installation files
+# 10. Prüfen, ob ein Desktop-Environment läuft
+if [[ "$XDG_SESSION_TYPE" == "x11" || "$XDG_SESSION_TYPE" == "wayland" ]]; then
+  echo
+  echo "Grafische Sitzung erkannt ($XDG_SESSION_TYPE). Installiere dconf-Pakete für bessere Flatpak-Unterstützung..."
+
+  case "$DISTRO" in
+    debian|ubuntu)
+      eval "$PM_INSTALL dconf-cli dconf-service"
+      ;;
+    arch)
+      eval "$PM_INSTALL dconf"
+      ;;
+    fedora)
+      eval "$PM_INSTALL dconf"
+      ;;
+    alpine)
+      eval "$PM_INSTALL dconf"
+      ;;
+    *)
+      echo "Unbekannte Distribution, überspringe dconf-Installation."
+      ;;
+  esac
+
+  # Sicherstellen, dass dconf-Datenbank aktualisiert wird
+  if command -v dconf >/dev/null 2>&1; then
+    echo "Führe dconf update aus..."
+    sudo mkdir -p /etc/dconf/db/local.d
+    sudo dconf update
+  fi
+else
+  echo
+  echo "Keine grafische Sitzung erkannt. Überspringe dconf-Installation."
+fi
+
+# 11. Flatpak-Apps installieren
+echo
+echo "Installiere Flatpak-Anwendungen..."
+
+FLATPAK_APPS=(
+  "org.gimp.GIMP"
+  "com.abisource.AbiWord"
+  "org.blender.Blender"
+  "net.lutris.Lutris"
+  "org.kde.kdenlive"
+  "com.obsproject.Studio"
+  "org.feichtmeier.Musicpod"
+  "sa.sy.bluerecorder"
+  "org.flameshot.Flameshot"
+  "com.usebottles.bottles"
+)
+
+for APP in "${FLATPAK_APPS[@]}"; do
+  echo "Installiere $APP..."
+  flatpak install -y flathub "$APP"
+done
+
+# 12. Abschlussmeldung
+echo
+echo "✅ Alle Aufgaben abgeschlossen."
+
+# 13. Aufräumen
 rm -r /opt/scriptfiles/testarea-main
 rm /opt/main.zip
-#
-clear
-echo #
-echo #
-echo "- The script has been executed"
-echo "- Installation files that are no longer required deleted"
-echo "- Reboot system now!"
-echo #
-echo "- Das Script wurde ausgeführt"
-echo "- Nicht mehr benötigte Installationsdateien wieder gelöscht"
-echo "- System jetzt neu starten!"
-echo #
+
+exit 0
