@@ -5,9 +5,6 @@
 # root user required (su)
 #
 # 1. Architektur prüfen
-#!/bin/bash
-
-# 1. Architektur prüfen
 ARCH=$(uname -m)
 if [[ "$ARCH" != "x86_64" ]]; then
   echo "Nur x64-Architekturen werden unterstützt (aktuell: $ARCH)."
@@ -66,7 +63,10 @@ if ! command -v "$PM_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
-# 5. Listen für Zusammenfassung
+# 5. Feste Paketliste
+PACKAGES_TO_INSTALL=("flatpak")
+
+# Listen für Zusammenfassung
 installed_packages=()
 skipped_packages=()
 failed_packages=()
@@ -75,10 +75,10 @@ failed_packages=()
 echo "Update der Paketquellen..."
 eval "$PM_UPDATE"
 
-# 7. Pakete einzeln prüfen und installieren
-for PACKAGE in "$@"; do
+# 7. Pakete installieren
+for PACKAGE in "${PACKAGES_TO_INSTALL[@]}"; do
   echo -n "Prüfe Paket $PACKAGE... "
-  
+
   if [[ "$DISTRO" == "debian" || "$DISTRO" == "ubuntu" ]]; then
     STATUS=$($PM_QUERY "$PACKAGE" 2>/dev/null || true)
     if [[ "$STATUS" == "$CHECK_INSTALLED_STATUS" ]]; then
@@ -104,16 +104,7 @@ for PACKAGE in "$@"; do
   fi
 done
 
-# 8. Flatpak prüfen und installieren
-echo -n "Prüfe und installiere Flatpak... "
-if ! command -v flatpak >/dev/null 2>&1; then
-  echo "Flatpak ist nicht installiert. Installiere..."
-  eval "$FLATPAK_INSTALL"
-else
-  echo "Flatpak ist bereits installiert."
-fi
-
-# 9. Zusammenfassung
+# 8. Zusammenfassung
 echo
 echo "=== Zusammenfassung ==="
 echo "Installiert: ${#installed_packages[@]}"
@@ -130,23 +121,32 @@ if [ ${#failed_packages[@]} -gt 0 ]; then
 fi
 echo "========================"
 
-# 10. Flatpak Remote und Flatpak-Anwendungen installieren
+# 9. Flatpak Remote und Flatpak-Apps
 echo
 if command -v flatpak >/dev/null 2>&1; then
   echo "Füge Flathub-Remote hinzu (falls noch nicht vorhanden)..."
   flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
   echo "Installiere Flatpak-Anwendungen..."
-  flatpak install -y flathub org.gimp.GIMP \
-                      flathub com.abisource.AbiWord \
-                      flathub org.blender.Blender \
-                      flathub net.lutris.Lutris \
-                      flathub org.kde.kdenlive \
-                      flathub com.obsproject.Studio \
-                      flathub org.feichtmeier.Musicpod \
-                      flathub sa.sy.bluerecorder \
-                      flathub org.flameshot.Flameshot \
-                      flathub com.usebottles.bottles
+
+  FLATPAK_APPS=(
+    "org.gimp.GIMP"
+    "com.abisource.AbiWord"
+    "org.blender.Blender"
+    "net.lutris.Lutris"
+    "org.kde.kdenlive"
+    "com.obsproject.Studio"
+    "org.feichtmeier.Musicpod"
+    "sa.sy.bluerecorder"
+    "org.flameshot.Flameshot"
+    "com.usebottles.bottles"
+  )
+
+  for APP in "${FLATPAK_APPS[@]}"; do
+    echo "Installiere $APP..."
+    flatpak install -y flathub "$APP"
+  done
+
 else
   echo "Flatpak konnte nicht installiert werden oder ist nicht verfügbar. Überspringe Flatpak-Anwendungen."
 fi
