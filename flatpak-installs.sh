@@ -201,12 +201,15 @@ for APP in "${FLATPAK_APPS[@]}"; do
   flatpak install -y flathub "$APP" 2> >(grep -v 'dconf-WARNING' >&2)
 done
 
-# 12. Abschlussmeldung
-echo
-echo "✅ Alle Aufgaben abgeschlossen."
-
-# 13. Aufräumen
+# 12. Aufräumen
 rm -r /opt/scriptfiles/testarea-main
 rm /opt/main.zip
+
+clear
+
+# 13. Abschlussmeldung
+echo
+echo
+echo "✅ Alle Aufgaben abgeschlossen."
 
 exit 0
