@@ -25,9 +25,12 @@
 # The system checks whether the Flatpak apps to be installed are already installed via Snap or Native. If yes, the installation of the respective Flatpak app is skipped.
 # Warnings that are only informative and have no influence on the function of the respective app, e.g. because KDE is used instead of Gnome, are hidden.
 #
+################################################################################################################################################################################################################
+#
 # download and unzip: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/flatpak-installs.sh
 # execute (unique): cd /opt/scriptfiles/testarea-main && ./flatpak-installs.sh
 #
+#################################################################################################################################################################################################################
 # Farbdefinitionen
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
