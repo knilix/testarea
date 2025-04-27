@@ -1,10 +1,11 @@
 #!/bin/bash
 # Maintener: @knilix
+#
 # --> Only test - only x64 !
 #
 # root user benötigt (su)
 #
-# Für Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD und Alpine geeignet.
+# Für Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD, Alpine, CachyOS, Bazzite, Nitrux geeignet.
 # Vorher erledigen: 
 # - installieren von wget und zip 
 #
@@ -15,7 +16,7 @@
 #
 # root user required (su)
 #
-# Suitable for Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD and Alpine.
+# Suitable for Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD, Alpine, CachyOS, Bazzite, Nitrux.
 # Do it beforehand:
 # - install wget and zip
 #
@@ -53,9 +54,25 @@ if [ "$ARCHITECTURE" != "x86_64" ]; then
 fi
 
 # 2. Distribution erkennen
+IS_NITRUX=false
+
 if [ -f /etc/os-release ]; then
   . /etc/os-release
   DISTRO=$ID
+
+  # Sonderfälle behandeln
+  case "$DISTRO" in
+    cachyos)
+      DISTRO="arch"
+      ;;
+    bazzite)
+      DISTRO="fedora"
+      ;;
+    nitrux)
+      DISTRO="nitrux"
+      IS_NITRUX=true
+      ;;
+  esac
 elif [ "$(uname -s)" = "FreeBSD" ]; then
   DISTRO="freebsd"
 elif [ -f /etc/gentoo-release ]; then
@@ -69,90 +86,101 @@ else
   exit 1
 fi
 
-echo -e "${GREEN}Distribution erkannt: $DISTRO${NC}"
+if [[ "$IS_NITRUX" == true ]]; then
+  echo -e "${GREEN}Distribution erkannt: Nitrux (nur Flatpak-Modus)${NC}"
+else
+  echo -e "${GREEN}Distribution erkannt: $DISTRO${NC}"
+fi
 
 # 3. Paketmanager Befehle setzen
-case "$DISTRO" in
-  debian|ubuntu)
-    PM_UPDATE="apt update -y 2>/dev/null"
-    PM_INSTALL="apt install -y 2>/dev/null"
-    PM_QUERY="dpkg-query -W -f='\${Status}'"
-    CHECK_INSTALLED_STATUS="install ok installed"
-    ;;
-  arch)
-    PM_UPDATE="pacman -Sy --noconfirm"
-    PM_INSTALL="pacman -S --noconfirm"
-    PM_QUERY="pacman -Q"
-    CHECK_INSTALLED_STATUS=""
-    ;;
-  fedora)
-    PM_UPDATE="dnf makecache"
-    PM_INSTALL="dnf install -y"
-    PM_QUERY="rpm -q"
-    CHECK_INSTALLED_STATUS=""
-    ;;
-  alpine)
-    PM_UPDATE="apk update"
-    PM_INSTALL="apk add"
-    PM_QUERY="apk info -e"
-    CHECK_INSTALLED_STATUS=""
-    ;;
-  gentoo)
-    PM_UPDATE="emerge --sync"
-    PM_INSTALL="emerge"
-    PM_QUERY="equery list"
-    CHECK_INSTALLED_STATUS=""
-    if ! command -v equery >/dev/null 2>&1; then
-      echo -e "${GRAY}Installiere gentoolkit (benötigt für Paketprüfungen)...${NC}"
-      emerge --quiet app-portage/gentoolkit
-    fi
-    ;;
-  freebsd)
-    PM_UPDATE="pkg update"
-    PM_INSTALL="pkg install -y"
-    PM_QUERY="pkg info"
-    CHECK_INSTALLED_STATUS=""
-    ;;
-  *)
-    echo -e "${RED}Distribution $DISTRO wird nicht unterstützt.${NC}"
-    exit 1
-    ;;
-esac
+if [[ "$IS_NITRUX" != true ]]; then
+  case "$DISTRO" in
+    debian|ubuntu)
+      PM_UPDATE="apt update -y 2>/dev/null"
+      PM_INSTALL="apt install -y 2>/dev/null"
+      PM_QUERY="dpkg-query -W -f='\${Status}'"
+      CHECK_INSTALLED_STATUS="install ok installed"
+      ;;
+    arch)
+      PM_UPDATE="pacman -Sy --noconfirm"
+      PM_INSTALL="pacman -S --noconfirm"
+      PM_QUERY="pacman -Q"
+      CHECK_INSTALLED_STATUS=""
+      ;;
+    fedora)
+      PM_UPDATE="dnf makecache"
+      PM_INSTALL="dnf install -y"
+      PM_QUERY="rpm -q"
+      CHECK_INSTALLED_STATUS=""
+      ;;
+    alpine)
+      PM_UPDATE="apk update"
+      PM_INSTALL="apk add"
+      PM_QUERY="apk info -e"
+      CHECK_INSTALLED_STATUS=""
+      ;;
+    gentoo)
+      PM_UPDATE="emerge --sync"
+      PM_INSTALL="emerge"
+      PM_QUERY="equery list"
+      CHECK_INSTALLED_STATUS=""
+      if ! command -v equery >/dev/null 2>&1; then
+        echo -e "${GRAY}Installiere gentoolkit (benötigt für Paketprüfungen)...${NC}"
+        emerge --quiet app-portage/gentoolkit
+      fi
+      ;;
+    freebsd)
+      PM_UPDATE="pkg update"
+      PM_INSTALL="pkg install -y"
+      PM_QUERY="pkg info"
+      CHECK_INSTALLED_STATUS=""
+      ;;
+    *)
+      echo -e "${RED}Distribution $DISTRO wird nicht unterstützt.${NC}"
+      exit 1
+      ;;
+  esac
+fi
 
-# 4. Paketmanager updaten
-echo -e "${GRAY}Aktualisiere Paketquellen...${NC}"
-eval "$PM_UPDATE"
+# 4. Paketquellen aktualisieren und Flatpak installieren (wenn nicht Nitrux)
+if [[ "$IS_NITRUX" != true ]]; then
+  echo -e "${GRAY}Aktualisiere Paketquellen...${NC}"
+  eval "$PM_UPDATE"
 
-# 5. Feste Paketliste (nur Flatpak, kein snapd)
-PACKAGES_TO_INSTALL=("flatpak")  # Nur flatpak wird installiert, niemals snapd
-
-# 6. Pakete installieren
-for package in "${PACKAGES_TO_INSTALL[@]}"; do
-  echo -e "${GRAY}Prüfe, ob $package installiert ist...${NC}"
-  
-  if [ "$package" = "flatpak" ]; then
-    if command -v flatpak >/dev/null 2>&1; then
-      echo -e "${GREEN}Flatpak bereits installiert.${NC}"
-      continue
-    fi
+  echo -e "${GRAY}Prüfe, ob Flatpak installiert ist...${NC}"
+  if ! command -v flatpak >/dev/null 2>&1; then
+    echo -e "${GRAY}Installiere Flatpak...${NC}"
+    eval "$PM_INSTALL flatpak"
+  else
+    echo -e "${GREEN}Flatpak bereits installiert.${NC}"
   fi
+else
+  echo -e "${GRAY}Überspringe Paketquellen-Update und Flatpak-Installation (Nitrux).${NC}"
+fi
 
-  if [ "$PM_QUERY" != "" ]; then
-    if $PM_QUERY "$package" 2>/dev/null | grep -q "$CHECK_INSTALLED_STATUS"; then
-      echo -e "${GREEN}$package ist bereits installiert.${NC}"
-      continue
-    fi
-  fi
-
-  echo -e "${GRAY}Installiere $package...${NC}"
-  eval "$PM_INSTALL $package"
-done
-
-# 7. Flathub hinzufügen (nur einmal)
+# 5. Flathub hinzufügen (nur einmal)
 echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# 8. Flatpak-Apps installieren
+# Internetverbindung prüfen | Check internet connection
+MAX_RETRIES=3
+RETRY_COUNT=0
+
+echo -e "${GRAY}Prüfe Internetverbindung...${NC}"
+
+while ! ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1; do
+  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+    echo -e "${RED}Keine Internetverbindung nach ${MAX_RETRIES} Versuchen. Beende.${NC}"
+    exit 1
+  fi
+  echo -e "${YELLOW}Keine Verbindung. Versuch $((RETRY_COUNT+1)) von $MAX_RETRIES...${NC}"
+  ((RETRY_COUNT++))
+  sleep 5  # 5 Sekunden warten, bevor der nächste Versuch gemacht wird
+done
+
+echo -e "${GREEN}Internet connection OK.${NC}"
+
+# 6. Flatpak-Apps installieren
 FLATPAK_APPS=(
   "com.discordapp.Discord"
   "org.gimp.GIMP"
@@ -177,11 +205,11 @@ for app in "${FLATPAK_APPS[@]}"; do
   fi
 done
 
-# 9. Aufräumen
+# 7. Aufräumen
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
 rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
-#
+
 echo
 echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
 echo
