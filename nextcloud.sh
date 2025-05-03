@@ -54,16 +54,9 @@ EOF
 echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
 cd /tmp
 
-# Abfrage der neuesten Version von Nextcloud
-LATEST_URL=$(curl -s https://nextcloud.com/install | grep -oP 'https://download\.nextcloud\.com/server/releases/nextcloud-[0-9.]+\.zip' | head -n1)
-
-if [[ -z "$LATEST_URL" ]]; then
-  echo -e "${RED} Fehler: Konnte die neueste Version von Nextcloud nicht finden.${NC}"
-  exit 1
-fi
-
-wget "$LATEST_URL"
-unzip nextcloud-*.zip -d /var/www/
+# Verwende den richtigen Link zum Download der neuesten Version von Nextcloud
+wget https://download.nextcloud.com/server/releases/latest.zip -O nextcloud.zip
+unzip nextcloud.zip -d /var/www/
 chown -R www-data:www-data /var/www/nextcloud
 
 # === Apache konfigurieren ===
