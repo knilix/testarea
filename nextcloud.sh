@@ -1,6 +1,7 @@
 #!/bin/bash
 # Maintainer: @knilix
-# Für Ubuntu (x64). Root-Rechte erforderlich.
+# Version: 1.0
+# Für Ubuntu (x64), root erforderlich
 
 set -e
 
@@ -9,45 +10,27 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# === Parameter-Parsing ===
-for arg in "$@"; do
-  case $arg in
-    --domain=*)
-      DOMAIN="${arg#*=}"
-      shift
-      ;;
-    --email=*)
-      EMAIL="${arg#*=}"
-      shift
-      ;;
-    *)
-      ;;
-  esac
-done
-
-# === Benutzer-Eingaben ===
-if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
-  echo -e "${BLUE}== Nextcloud Setup (interaktiv) ==${NC}"
-  [[ -z "$DOMAIN" ]] && read -rp "Domain (z.B. cloud.example.com): " DOMAIN
-  [[ -z "$EMAIL" ]] && read -rp "E-Mail für Let's Encrypt: " EMAIL
-fi
+# === Eingabe ===
+echo -e "${BLUE}== Nextcloud Setup für Ubuntu/Debian ==${NC}"
+read -rp "Domain (z.B. cloud.example.com): " DOMAIN
+read -rp "E-Mail für Let's Encrypt: " EMAIL
 
 if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
-  echo -e "${RED}Fehler: Domain oder E-Mail fehlt.${NC}"
+  echo -e "${RED}Domain oder E-Mail fehlt. Abbruch.${NC}"
   exit 1
 fi
 
 # === Pakete installieren ===
-echo -e "${BLUE}[+] Installiere Pakete...${NC}"
+echo -e "${BLUE}[+] Installiere benötigte Pakete...${NC}"
 apt update
-apt install -y apache2 mariadb-server redis-server ufw fail2ban unzip curl wget software-properties-common \
-  php php-cli php-gd php-xml php-mbstring php-curl php-zip php-intl php-bcmath php-gmp php-imagick php-redis php-mysql \
-  certbot python3-certbot-apache
+apt install -y apache2 mariadb-server redis-server ufw fail2ban \
+  php php-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,mysql} \
+  unzip curl wget certbot python3-certbot-apache
 
-# === Datenbank einrichten ===
-echo -e "${BLUE}[+] Erstelle Nextcloud-Datenbank...${NC}"
+# === MariaDB vorbereiten ===
+echo -e "${BLUE}[+] Konfiguriere MariaDB...${NC}"
 NEXTCLOUD_DB="nextcloud"
 NEXTCLOUD_DB_USER="ncuser"
 NEXTCLOUD_DB_PASS="$(openssl rand -base64 18)"
@@ -61,14 +44,17 @@ EOF
 
 # === Nextcloud herunterladen ===
 echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
+cd /tmp
 wget https://download.nextcloud.com/server/releases/latest.zip -O nextcloud.zip
 
 if [[ ! -f nextcloud.zip ]]; then
-  echo -e "${RED}[!] Fehler: Download fehlgeschlagen.${NC}"
+  echo -e "${RED}[!] Fehler beim Herunterladen von Nextcloud.${NC}"
   exit 1
 fi
 
-unzip nextcloud.zip -d /var/www/
+unzip nextcloud.zip
+rm -rf /var/www/nextcloud
+mv nextcloud /var/www/nextcloud
 chown -R www-data:www-data /var/www/nextcloud
 
 # === Apache konfigurieren ===
@@ -90,7 +76,7 @@ a2enmod rewrite headers env dir mime setenvif ssl
 systemctl reload apache2
 
 # === Nextcloud installieren ===
-echo -e "${BLUE}[+] Installiere Nextcloud...${NC}"
+echo -e "${BLUE}[+] Starte Nextcloud Installation...${NC}"
 NEXTCLOUD_ADMIN="admin"
 NEXTCLOUD_ADMIN_PASS="$(openssl rand -base64 18)"
 
@@ -103,36 +89,29 @@ sudo -u www-data php /var/www/nextcloud/occ maintenance:install \
   --admin-pass "$NEXTCLOUD_ADMIN_PASS" \
   --data-dir "/var/www/nextcloud/data"
 
-# === Redis konfigurieren ===
+# === Redis Konfiguration ===
 echo -e "${BLUE}[+] Konfiguriere Redis...${NC}"
 CONFIG="/var/www/nextcloud/config/config.php"
-sudo -u www-data php -r "
-  \$CONFIG = include '$CONFIG';
-  \$CONFIG['memcache.local'] = '\\OC\\Memcache\\Redis';
-  \$CONFIG['memcache.locking'] = '\\OC\\Memcache\\Redis';
-  \$CONFIG['redis'] = ['host' => '127.0.0.1', 'port' => 6379];
-  file_put_contents('$CONFIG', '<?php\nreturn ' . var_export(\$CONFIG, true) . ';');"
+cp "$CONFIG" "${CONFIG}.bak"
 
-# === HTTPS mit Let's Encrypt ===
+sed -i "/);/i\
+  'memcache.local' => '\\\\OC\\\\Memcache\\\\Redis',\n  'memcache.locking' => '\\\\OC\\\\Memcache\\\\Redis',\n  'redis' => array (\n    'host' => '127.0.0.1',\n    'port' => 6379,\n  )," "$CONFIG"
+
+# === Let's Encrypt HTTPS ===
 echo -e "${BLUE}[+] Beantrage TLS-Zertifikat...${NC}"
 certbot --apache --non-interactive --agree-tos -m "$EMAIL" --redirect -d "$DOMAIN"
 
-# === Firewall aktivieren ===
-echo -e "${BLUE}[+] Aktiviere Firewall (UFW)...${NC}"
+# === Firewall & Fail2Ban ===
+echo -e "${BLUE}[+] Konfiguriere UFW & Fail2Ban...${NC}"
 ufw allow OpenSSH
 ufw allow 80,443/tcp
 ufw --force enable
-
-# === Fail2Ban starten ===
-echo -e "${BLUE}[+] Aktiviere Fail2Ban...${NC}"
 systemctl enable --now fail2ban
 
 # === Abschluss ===
-echo
-echo -e "${GREEN}Installation abgeschlossen!${NC}"
+echo -e "\n${GREEN}Installation abgeschlossen!${NC}"
 echo -e "${YELLOW}Zugriff: https://$DOMAIN${NC}"
-echo -e "${YELLOW}Admin: $NEXTCLOUD_ADMIN${NC}"
-echo -e "${YELLOW}Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
-echo -e "${YELLOW}Datenbank-Passwort: $NEXTCLOUD_DB_PASS${NC}"
-
-
+echo -e "${YELLOW}Admin-Benutzer: $NEXTCLOUD_ADMIN${NC}"
+echo -e "${YELLOW}Admin-Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
+echo -e "${YELLOW}DB-Passwort: $NEXTCLOUD_DB_PASS${NC}"
+echo
