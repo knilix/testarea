@@ -2,7 +2,7 @@
 # Maintener: @knilix
 # --> Only test - only x64 !
 # root user benötigt (su)
-# Für Debian, Ubuntu, Fedora, Arch, FreeBSD und OpenBSD geeignet.
+# Nur für Debian geeignet.
 # Vorher erledigen: 
 # - installieren von wget und zip 
 #
@@ -12,7 +12,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
-GRAY='\033[0;37m'  # Gray für Aufräum-Nachricht
 NC='\033[0m' # No Color
 
 # === Benutzer-Eingaben ===
@@ -27,49 +26,15 @@ fi
 
 # === Hilfsfunktionen ===
 function install_packages() {
-  echo -e "${BLUE}[+] Installiere Pakete fuer $1...${NC}"
-  case "$1" in
-    debian|ubuntu)
-      apt update
-      apt install -y apache2 mariadb-server redis-server ufw fail2ban \
-        php php-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,mysql} \
-        unzip curl wget certbot python3-certbot-apache
-      ;;
-    fedora)
-      dnf install -y httpd mariadb-server redis ufw fail2ban \
-        php php-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,mysqlnd} \
-        unzip curl wget certbot mod_ssl
-      ;;
-    arch)
-      pacman -Sy --noconfirm apache mariadb redis php php-apache php-gd php-intl php-curl \
-        php-zip php-mbstring php-gmp php-imagick php-redis unzip curl wget certbot ufw fail2ban
-      ;;
-    freebsd|openbsd)
-      echo -e "${YELLOW}[!] BSD-Unterstuetzung noch manuell. Bitte manuell Pakete installieren.${NC}"
-      exit 1
-      ;;
-    *)
-      echo -e "${RED} Nicht unterstuetzte Distribution: $1${NC}"
-      exit 1
-      ;;
-  esac
-}
-
-function detect_distro() {
-  if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    echo "$ID"
-  elif uname -s | grep -q FreeBSD; then
-    echo "freebsd"
-  elif uname -s | grep -q OpenBSD; then
-    echo "openbsd"
-  else
-    echo "unknown"
-  fi
+  echo -e "${BLUE}[+] Installiere Pakete fuer Debian...${NC}"
+  apt update
+  apt install -y apache2 mariadb-server redis-server ufw fail2ban \
+    php php-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,mysql} \
+    unzip curl wget certbot python3-certbot-apache
 }
 
 # === Systemerkennung und Paketinstallation ===
-DISTRO=$(detect_distro)
+DISTRO="debian"
 echo -e "${BLUE}[i] Erkanntes System: $DISTRO${NC}"
 install_packages "$DISTRO"
 
@@ -150,14 +115,15 @@ echo -e "${BLUE}[+] Aktiviere Fail2Ban...${NC}"
 systemctl enable --now fail2ban
 
 # === Aufräumen ===
-echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+echo -e "${BLUE}[+] Bereinige temporäre Dateien...${NC}"
 rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
 
 # === Abschluss ===
-echo -e "\n${GREEN} Alle Aufgaben abgeschlossen!${NC}"
+echo -e "\n${GREEN} Installation abgeschlossen!${NC}"
 echo -e "${YELLOW} Zugriff: https://$DOMAIN${NC}"
 echo -e "${YELLOW} Admin: $NEXTCLOUD_ADMIN${NC}"
 echo -e "${YELLOW} Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
 echo -e "${YELLOW} Datenbank-Passwort: $NEXTCLOUD_DB_PASS${NC}"
 echo
+
