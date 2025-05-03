@@ -2,9 +2,6 @@
 # Maintener: @knilix
 # --> Only test - only x64 !
 # root user benötigt (su)
-#
-# Installation von Nextcloud, MariaDB und Redis
-#
 # Für Debian, Ubuntu, Alpine, Fedora, Arch, FreeBSD und OpenBSD geeignet.
 # Vorher erledigen: 
 # - installieren von wget und zip 
@@ -43,8 +40,15 @@ function install_packages() {
         unzip curl wget certbot mod_ssl
       ;;
     alpine)
-      apk add apache2 mariadb mariadb-client redis php8 php8-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,pdo_mysql} \
-        unzip curl wget certbot py3-certbot-apache ufw fail2ban
+      # Überprüfe, ob die richtigen Repositories aktiviert sind
+      if ! grep -q 'community' /etc/apk/repositories; then
+        echo -e "${YELLOW}[+] Community-Repositories aktivieren...${NC}"
+        echo "http://dl-cdn.alpinelinux.org/alpine/v3.18/community" >> /etc/apk/repositories
+        apk update
+      fi
+
+      apk add php8 php8-fpm php8-opcache php8-mysqli php8-redis php8-curl php8-gd php8-bcmath php8-xml php8-mbstring php8-intl php8-zip php8-gmp php8-imagick \
+        apache2 mariadb mariadb-client redis unzip curl wget certbot py3-certbot-apache ufw fail2ban
       rc-update add apache2 default
       rc-update add mariadb default
       rc-update add redis default
@@ -112,56 +116,4 @@ cat >/etc/apache2/sites-available/nextcloud.conf <<EOF
     Require all granted
     AllowOverride All
     Options FollowSymLinks MultiViews
-  </Directory>
-</VirtualHost>
-EOF
-
-a2ensite nextcloud
-a2enmod rewrite headers env dir mime setenvif ssl
-systemctl restart apache2
-
-# === Nextcloud installieren ===
-echo -e "${BLUE}[+] Fuehre Nextcloud-Installation aus...${NC}"
-NEXTCLOUD_ADMIN="admin"
-NEXTCLOUD_ADMIN_PASS="$(openssl rand -base64 18)"
-
-sudo -u www-data php /var/www/nextcloud/occ maintenance:install \
-  --database "mysql" \
-  --database-name "$NEXTCLOUD_DB" \
-  --database-user "$NEXTCLOUD_DB_USER" \
-  --database-pass "$NEXTCLOUD_DB_PASS" \
-  --admin-user "$NEXTCLOUD_ADMIN" \
-  --admin-pass "$NEXTCLOUD_ADMIN_PASS" \
-  --data-dir "/var/www/nextcloud/data"
-
-# === Redis konfigurieren ===
-echo -e "${BLUE}[+] Konfiguriere Redis...${NC}"
-CONFIG="/var/www/nextcloud/config/config.php"
-sudo -u www-data php -r "
-  \$CONFIG = include '$CONFIG';
-  \$CONFIG['memcache.local'] = '\\OC\\Memcache\\Redis';
-  \$CONFIG['memcache.locking'] = '\\OC\\Memcache\\Redis';
-  \$CONFIG['redis'] = ['host' => '127.0.0.1', 'port' => 6379];
-  file_put_contents('$CONFIG', '<?php\nreturn ' . var_export(\$CONFIG, true) . ';');"
-
-# === HTTPS via Let's Encrypt ===
-echo -e "${BLUE}[+] Beantrage TLS-Zertifikat...${NC}"
-certbot --apache --non-interactive --agree-tos -m "$EMAIL" --redirect -d "$DOMAIN"
-
-# === UFW aktivieren ===
-echo -e "${BLUE}[+] Aktiviere Firewall (UFW)...${NC}"
-ufw allow OpenSSH
-ufw allow 80,443/tcp
-ufw --force enable
-
-# === Fail2Ban konfigurieren ===
-echo -e "${BLUE}[+] Aktiviere Fail2Ban...${NC}"
-systemctl enable --now fail2ban
-
-# === Abschluss ===
-echo -e "\n${GREEN} Installation abgeschlossen!${NC}"
-echo -e "${YELLOW} Zugriff: https://$DOMAIN${NC}"
-echo -e "${YELLOW} Admin: $NEXTCLOUD_ADMIN${NC}"
-echo -e "${YELLOW} Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
-echo -e "${YELLOW} Datenbank-Passwort: $NEXTCLOUD_DB_PASS${NC}"
-echo
+  </
