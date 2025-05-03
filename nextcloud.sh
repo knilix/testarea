@@ -53,7 +53,15 @@ EOF
 # === Nextcloud holen und entpacken ===
 echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
 cd /tmp
+
+# URL der neuesten Nextcloud-Version automatisch extrahieren
 LATEST_URL=$(curl -s https://nextcloud.com/install | grep -oP 'https://download\.nextcloud\.com/server/releases/nextcloud-[0-9.]+\.zip' | head -n1)
+
+if [[ -z "$LATEST_URL" ]]; then
+  echo -e "${RED} Fehler beim Abrufen des Download-Links für Nextcloud!${NC}"
+  exit 1
+fi
+
 wget "$LATEST_URL"
 unzip nextcloud-*.zip -d /var/www/
 chown -R www-data:www-data /var/www/nextcloud
@@ -110,20 +118,4 @@ ufw allow OpenSSH
 ufw allow 80,443/tcp
 ufw --force enable
 
-# === Fail2Ban konfigurieren ===
-echo -e "${BLUE}[+] Aktiviere Fail2Ban...${NC}"
-systemctl enable --now fail2ban
-
-# === Aufräumen ===
-echo -e "${BLUE}[+] Bereinige temporäre Dateien...${NC}"
-rm -r /opt/scriptfiles/testarea-main 2>/dev/null
-rm /opt/main.zip 2>/dev/null
-
-# === Abschluss ===
-echo -e "\n${GREEN} Installation abgeschlossen!${NC}"
-echo -e "${YELLOW} Zugriff: https://$DOMAIN${NC}"
-echo -e "${YELLOW} Admin: $NEXTCLOUD_ADMIN${NC}"
-echo -e "${YELLOW} Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
-echo -e "${YELLOW} Datenbank-Passwort: $NEXTCLOUD_DB_PASS${NC}"
-echo
-
+# === Fail2Ban
