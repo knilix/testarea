@@ -52,10 +52,21 @@ EOF
 
 # === Nextcloud holen und entpacken ===
 echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
-cd /tmp
 
 # Verwende den richtigen Link zum Download der neuesten Version von Nextcloud
-wget https://download.nextcloud.com/server/releases/latest.zip -O nextcloud.zip
+NEXTCLOUD_URL="https://download.nextcloud.com/server/releases/latest.zip"
+
+# Ausgabe zur Kontrolle der URL
+echo -e "${YELLOW}[i] Download-URL: $NEXTCLOUD_URL${NC}"
+
+wget "$NEXTCLOUD_URL" -O nextcloud.zip
+
+# Prüfen, ob der Download erfolgreich war
+if [[ ! -f nextcloud.zip ]]; then
+  echo -e "${RED}[!] Fehler: Nextcloud konnte nicht heruntergeladen werden.${NC}"
+  exit 1
+fi
+
 unzip nextcloud.zip -d /var/www/
 chown -R www-data:www-data /var/www/nextcloud
 
