@@ -1,11 +1,7 @@
 #!/bin/bash
 # Maintener: @knilix
-# --> Only test - only x64 !
-# root user benötigt (su)
-# Nur für Debian geeignet.
-# Vorher erledigen: 
-# - installieren von wget und zip 
-#
+# --> Nur für Debian geeignet.
+
 set -e
 # === Farben ===
 RED='\033[0;31m'
@@ -50,25 +46,19 @@ GRANT ALL PRIVILEGES ON $NEXTCLOUD_DB.* TO '$NEXTCLOUD_DB_USER'@'localhost';
 FLUSH PRIVILEGES;
 EOF
 
-# === Nextcloud holen und entpacken ===
+# === Nextcloud herunterladen und entpacken ===
 echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
 
-# Verwende den richtigen Link zum Download der neuesten Version von Nextcloud
-NEXTCLOUD_URL="https://download.nextcloud.com/server/releases/latest.zip"
-
-# Ausgabe zur Kontrolle der URL
-echo -e "${YELLOW}[i] Download-URL: $NEXTCLOUD_URL${NC}"
-
-# Versuch, Nextcloud herunterzuladen, mit Fehlerausgabe
-wget "$NEXTCLOUD_URL" -O nextcloud.zip 2>&1 | tee download.log
+# Direktes wget verwenden
+wget https://download.nextcloud.com/server/releases/latest.zip -O nextcloud.zip
 
 # Prüfen, ob der Download erfolgreich war
 if [[ ! -f nextcloud.zip ]]; then
   echo -e "${RED}[!] Fehler: Nextcloud konnte nicht heruntergeladen werden.${NC}"
-  echo -e "${RED} Fehlerprotokoll: ${NC} download.log"
   exit 1
 fi
 
+# Entpacken
 unzip nextcloud.zip -d /var/www/
 chown -R www-data:www-data /var/www/nextcloud
 
@@ -128,16 +118,9 @@ ufw --force enable
 echo -e "${BLUE}[+] Aktiviere Fail2Ban...${NC}"
 systemctl enable --now fail2ban
 
-# === Aufräumen ===
-echo -e "${BLUE}[+] Bereinige temporäre Dateien...${NC}"
-rm -r /opt/scriptfiles/testarea-main 2>/dev/null
-rm /opt/main.zip 2>/dev/null
-
 # === Abschluss ===
 echo -e "\n${GREEN} Installation abgeschlossen!${NC}"
 echo -e "${YELLOW} Zugriff: https://$DOMAIN${NC}"
 echo -e "${YELLOW} Admin: $NEXTCLOUD_ADMIN${NC}"
 echo -e "${YELLOW} Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
-echo -e "${YELLOW} Datenbank-Passwort: $NEXTCLOUD_DB_PASS${NC}"
-echo
 
