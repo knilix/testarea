@@ -117,3 +117,12 @@ cat >/etc/apache2/sites-available/nextcloud.conf <<EOF
     AllowOverride All
     Options FollowSymLinks MultiViews
   </
+#
+Aufräumen
+echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+rm -r /opt/scriptfiles/testarea-main 2>/dev/null
+rm /opt/main.zip 2>/dev/null
+#
+echo
+echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
+echo
