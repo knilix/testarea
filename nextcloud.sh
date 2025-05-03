@@ -1,10 +1,9 @@
 #!/bin/bash
+
 # Maintainer: @knilix
 # Version: 1.0
-# Hinweis: Nur für Ubuntu/Debian (x64), root erforderlich
-
-#!/bin/bash
-
+# Hinweis: Nur für Debian (x64), root erforderlich
+#
 # Nextcloud Autoinstallation Script für Debian 12
 # Mit MariaDB und Redis Cache
 # ---------------------------------
@@ -17,6 +16,7 @@ trap 'echo "Ein Fehler ist aufgetreten. Installation wurde abgebrochen."' ERR
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
+GRAY='\033[0;37m'
 NC='\033[0m' # No Color
 
 # Prüfen, ob Script als root ausgeführt wird
@@ -236,7 +236,13 @@ echo -e "Nextcloud DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}"
 echo -e "Nextcloud DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
 echo -e "\n${BLUE}Bitte sichern Sie diese Anmeldedaten an einem sicheren Ort!${NC}"
 echo -e "${BLUE}Aus Sicherheitsgründen sollten Sie für die Produktion ein offizielles SSL-Zertifikat einrichten.${NC}"
-echo -e "\nViel Erfolg mit Ihrer neuen Nextcloud-Installation!"
-echo -e "${YELLOW}🔑 Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
-echo -e "${YELLOW}🗄️ DB-Passwort: $NEXTCLOUD_DB_PASS${NC}"
+
+# Aufräumen
+echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+rm -r /opt/scriptfiles/testarea-main 2>/dev/null
+rm /opt/main.zip 2>/dev/null
+#
 echo
+echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
+echo
+echo -e "\nViel Erfolg mit Ihrer neuen Nextcloud-Installation!"
