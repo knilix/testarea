@@ -3,116 +3,240 @@
 # Version: 1.0
 # Hinweis: Nur für Ubuntu/Debian (x64), root erforderlich
 
-set -e
+#!/bin/bash
 
-# === Farben ===
-RED='\033[0;31m'
+# Nextcloud Autoinstallation Script für Debian 12
+# Mit MariaDB und Redis Cache
+# ---------------------------------
+
+# Fehler-Handling
+set -e
+trap 'echo "Ein Fehler ist aufgetreten. Installation wurde abgebrochen."' ERR
+
+# Farben für die Ausgabe
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[1;34m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# === Eingabe ===
-echo -e "${BLUE}== Nextcloud Setup für Ubuntu/Debian ==${NC}"
-read -rp "Domain (z.B. cloud.example.com): " DOMAIN
-read -rp "E-Mail fuer Let's Encrypt: " EMAIL
-
-if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
-  echo -e "${RED}Domain oder E-Mail fehlt. Abbruch.${NC}"
+# Prüfen, ob Script als root ausgeführt wird
+if [ "$EUID" -ne 0 ]; then
+  echo -e "${RED}Bitte führen Sie das Script als root aus.${NC}"
   exit 1
 fi
 
-# === Pakete installieren ===
-echo -e "${BLUE}[+] Installiere benötigte Pakete...${NC}"
-apt update
-apt install -y apache2 mariadb-server redis-server ufw fail2ban \
-  php php-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,mysql} \
-  unzip curl wget certbot python3-certbot-apache
+# Prüfen ob Debian 12
+if [ ! -f /etc/debian_version ] || [ "$(cat /etc/debian_version | cut -d'.' -f1)" -ne 12 ]; then
+  echo -e "${RED}Dieses Script ist nur für Debian 12 konzipiert.${NC}"
+  exit 1
+fi
 
-# === MariaDB vorbereiten ===
-echo -e "${BLUE}[+] Konfiguriere MariaDB...${NC}"
-NEXTCLOUD_DB="nextcloud"
-NEXTCLOUD_DB_USER="ncuser"
-NEXTCLOUD_DB_PASS="$(openssl rand -base64 18)"
+# Konfigurationsparameter
+# Diese können nach Bedarf angepasst werden
+MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32)
+NEXTCLOUD_DB_PASSWORD=$(openssl rand -base64 32)
+NEXTCLOUD_DB_NAME="nextcloud"
+NEXTCLOUD_DB_USER="nextcloud"
+NEXTCLOUD_ADMIN_USER="admin"
+NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 12)
+NEXTCLOUD_DATA_DIR="/var/www/nextcloud/data"
+DOMAIN_NAME=$(hostname -f)
 
-# MariaDB Zugriff prüfen und Berechtigungen setzen
-mysql -u root <<EOF
-CREATE DATABASE IF NOT EXISTS $NEXTCLOUD_DB CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-CREATE USER IF NOT EXISTS '$NEXTCLOUD_DB_USER'@'localhost' IDENTIFIED BY '$NEXTCLOUD_DB_PASS';
-GRANT ALL PRIVILEGES ON $NEXTCLOUD_DB.* TO '$NEXTCLOUD_DB_USER'@'localhost';
-FLUSH PRIVILEGES;
+# Prüfen ob Domain vorhanden ist
+if [ -z "$DOMAIN_NAME" ] || [ "$DOMAIN_NAME" = "localhost" ]; then
+  read -p "Geben Sie Ihren Domain-Namen für Nextcloud ein: " DOMAIN_NAME
+fi
+
+echo -e "${BLUE}=== Nextcloud Installationsscript für Debian 12 ===${NC}"
+echo -e "${BLUE}Dieses Script installiert automatisch Nextcloud mit MariaDB und Redis.${NC}"
+echo ""
+echo -e "${GREEN}Installationsparameter:${NC}"
+echo -e "Domain: ${GREEN}$DOMAIN_NAME${NC}"
+echo -e "Admin Benutzer: ${GREEN}$NEXTCLOUD_ADMIN_USER${NC}"
+echo -e "Datenbank: ${GREEN}$NEXTCLOUD_DB_NAME${NC}"
+echo ""
+
+# Bestätigung anfordern
+read -p "Installation starten? (j/n): " CONFIRM
+if [[ $CONFIRM != "j" && $CONFIRM != "J" ]]; then
+  echo "Installation abgebrochen."
+  exit 0
+fi
+
+# System aktualisieren
+echo -e "${BLUE}[1/10] System wird aktualisiert...${NC}"
+apt update && apt upgrade -y
+
+# Benötigte Pakete installieren
+echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
+apt install -y apache2 mariadb-server redis-server \
+  php php-cli php-common php-fpm php-json php-intl php-imagick \
+  php-curl php-mbstring php-zip php-xml php-gd php-mysql \
+  php-bz2 php-redis php-apcu unzip curl wget ssl-cert
+
+# Apache für PHP konfigurieren
+echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
+a2enmod rewrite headers env dir mime ssl
+a2enconf php8.2-fpm
+systemctl restart apache2
+
+# MariaDB absichern und konfigurieren
+echo -e "${BLUE}[4/10] MariaDB wird konfiguriert...${NC}"
+
+# MariaDB Root-Passwort setzen und Datenbank einrichten
+mysql -e "SET PASSWORD FOR root@localhost = PASSWORD('${MYSQL_ROOT_PASSWORD}');"
+mysql -e "DELETE FROM mysql.user WHERE User='';"
+mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+mysql -e "DROP DATABASE IF EXISTS test;"
+mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+mysql -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
+mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# MariaDB für Nextcloud optimieren
+cat > /etc/mysql/mariadb.conf.d/99-nextcloud.cnf << EOF
+[mysqld]
+transaction_isolation = READ-COMMITTED
+binlog_format = ROW
+innodb_large_prefix=on
+innodb_file_format=barracuda
+innodb_file_per_table=1
+max_allowed_packet = 128M
 EOF
 
-# === Nextcloud herunterladen ===
-echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
-cd /tmp
-wget https://download.nextcloud.com/server/releases/latest.zip -O nextcloud.zip
+# Redis konfigurieren
+echo -e "${BLUE}[5/10] Redis wird konfiguriert...${NC}"
+sed -i "s/port 6379/port 0/" /etc/redis/redis.conf
+sed -i "s/# unixsocket/unixsocket/" /etc/redis/redis.conf
+sed -i "s/# unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
+usermod -a -G redis www-data
+systemctl restart redis-server
 
-if [[ ! -f nextcloud.zip ]]; then
-  echo -e "${RED}[!] Fehler beim Herunterladen von Nextcloud.${NC}"
-  exit 1
-fi
+# PHP für Nextcloud optimieren
+echo -e "${BLUE}[6/10] PHP für Nextcloud optimieren...${NC}"
+cat > /etc/php/8.2/fpm/conf.d/99-nextcloud.ini << EOF
+memory_limit = 512M
+upload_max_filesize = 500M
+post_max_size = 500M
+max_execution_time = 300
+date.timezone = Europe/Berlin
+opcache.enable=1
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=10000
+opcache.memory_consumption=128
+opcache.save_comments=1
+opcache.revalidate_freq=1
+EOF
 
-unzip nextcloud.zip
-rm -rf /var/www/nextcloud
-mv nextcloud /var/www/nextcloud
-chown -R www-data:www-data /var/www/nextcloud
+# PHP-FPM neustarten
+systemctl restart php8.2-fpm
 
-# === Apache konfigurieren ===
-echo -e "${BLUE}[+] Konfiguriere Apache...${NC}"
-cat >/etc/apache2/sites-available/nextcloud.conf <<EOF
+# Apache Virtual Host für Nextcloud konfigurieren
+echo -e "${BLUE}[7/10] Apache Virtual Host für Nextcloud wird konfiguriert...${NC}"
+
+# SSL-Zertifikat erstellen
+mkdir -p /etc/ssl/nextcloud/
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/nextcloud/nextcloud.key \
+  -out /etc/ssl/nextcloud/nextcloud.crt \
+  -subj "/CN=${DOMAIN_NAME}/O=Nextcloud/C=DE"
+
+# Virtual Host erstellen
+cat > /etc/apache2/sites-available/nextcloud.conf << EOF
 <VirtualHost *:80>
-  ServerName $DOMAIN
-  DocumentRoot /var/www/nextcloud
-  <Directory /var/www/nextcloud>
-    Require all granted
-    AllowOverride All
-    Options FollowSymLinks MultiViews
-  </Directory>
+    ServerName ${DOMAIN_NAME}
+    Redirect permanent / https://${DOMAIN_NAME}/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName ${DOMAIN_NAME}
+    
+    DocumentRoot /var/www/nextcloud
+    
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/nextcloud/nextcloud.crt
+    SSLCertificateKeyFile /etc/ssl/nextcloud/nextcloud.key
+    
+    <Directory /var/www/nextcloud>
+        Options +FollowSymlinks
+        AllowOverride All
+        Require all granted
+        
+        <IfModule mod_dav.c>
+            Dav off
+        </IfModule>
+        
+        SetEnv HOME /var/www/nextcloud
+        SetEnv HTTP_HOME /var/www/nextcloud
+    </Directory>
+    
+    ErrorLog ${APACHE_LOG_DIR}/nextcloud_error.log
+    CustomLog ${APACHE_LOG_DIR}/nextcloud_access.log combined
 </VirtualHost>
 EOF
 
-a2ensite nextcloud
-a2enmod rewrite headers env dir mime setenvif ssl
+# Virtual Host aktivieren
+a2ensite nextcloud.conf
 systemctl reload apache2
 
-# === Nextcloud installieren ===
-echo -e "${BLUE}[+] Starte Nextcloud Installation...${NC}"
-NEXTCLOUD_ADMIN="admin"
-NEXTCLOUD_ADMIN_PASS="$(openssl rand -base64 18)"
+# Nextcloud herunterladen und installieren
+echo -e "${BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...${NC}"
 
-sudo -u www-data php /var/www/nextcloud/occ maintenance:install \
+# Neueste stabile Version herunterladen
+wget -q https://download.nextcloud.com/server/releases/latest.zip -O /tmp/nextcloud.zip
+unzip -q /tmp/nextcloud.zip -d /var/www/
+rm /tmp/nextcloud.zip
+
+# Berechtigungen setzen
+mkdir -p "${NEXTCLOUD_DATA_DIR}"
+chown -R www-data:www-data /var/www/nextcloud/
+chown -R www-data:www-data "${NEXTCLOUD_DATA_DIR}"
+
+# Nextcloud initialisieren
+echo -e "${BLUE}[9/10] Nextcloud wird initialisiert...${NC}"
+
+cd /var/www/nextcloud
+sudo -u www-data php occ maintenance:install \
   --database "mysql" \
-  --database-name "$NEXTCLOUD_DB" \
-  --database-user "$NEXTCLOUD_DB_USER" \
-  --database-pass "$NEXTCLOUD_DB_PASS" \
-  --admin-user "$NEXTCLOUD_ADMIN" \
-  --admin-pass "$NEXTCLOUD_ADMIN_PASS" \
-  --data-dir "/var/www/nextcloud/data"
+  --database-name "${NEXTCLOUD_DB_NAME}" \
+  --database-user "${NEXTCLOUD_DB_USER}" \
+  --database-pass "${NEXTCLOUD_DB_PASSWORD}" \
+  --admin-user "${NEXTCLOUD_ADMIN_USER}" \
+  --admin-pass "${NEXTCLOUD_ADMIN_PASSWORD}" \
+  --data-dir "${NEXTCLOUD_DATA_DIR}"
 
-# === Redis Konfiguration ===
-echo -e "${BLUE}[+] Konfiguriere Redis...${NC}"
-CONFIG="/var/www/nextcloud/config/config.php"
-cp "$CONFIG" "${CONFIG}.bak"
+# Vertrauenswürdige Domains konfigurieren
+sudo -u www-data php occ config:system:set trusted_domains 0 --value="${DOMAIN_NAME}"
 
-sed -i "/);/i\
-  'memcache.local' => '\\\\OC\\\\Memcache\\\\Redis',\n  'memcache.locking' => '\\\\OC\\\\Memcache\\\\Redis',\n  'redis' => array (\n    'host' => '127.0.0.1',\n    'port' => 6379,\n  )," "$CONFIG"
+# Caching und Optimierungen konfigurieren
+echo -e "${BLUE}[10/10] Optimierungen werden angewendet...${NC}"
+sudo -u www-data php occ config:system:set memcache.local --value='\OC\Memcache\APCu'
+sudo -u www-data php occ config:system:set memcache.locking --value='\OC\Memcache\Redis'
+sudo -u www-data php occ config:system:set redis host --value='/var/run/redis/redis-server.sock'
+sudo -u www-data php occ config:system:set redis port --value=0
+sudo -u www-data php occ config:system:set redis timeout --value=0.0
+sudo -u www-data php occ config:system:set trusted_proxies 0 --value="127.0.0.1"
+sudo -u www-data php occ config:system:set overwriteprotocol --value="https"
+sudo -u www-data php occ config:system:set htaccess.RewriteBase --value="/"
+sudo -u www-data php occ maintenance:update:htaccess
 
-# === Let's Encrypt HTTPS ===
-echo -e "${BLUE}[+] Beantrage TLS-Zertifikat...${NC}"
-certbot --apache --non-interactive --agree-tos -m "$EMAIL" --redirect -d "$DOMAIN"
+# Cronjob für Nextcloud einrichten
+echo "*/5 * * * * www-data php -f /var/www/nextcloud/cron.php" > /etc/cron.d/nextcloud
+sudo -u www-data php occ background:cron
 
-# === Firewall & Fail2Ban ===
-echo -e "${BLUE}[+] Konfiguriere UFW & Fail2Ban...${NC}"
-ufw allow OpenSSH
-ufw allow 80,443/tcp
-ufw --force enable
-systemctl enable --now fail2ban
-
-# === Abschluss ===
-echo -e "\n${GREEN}✅ Nextcloud-Installation abgeschlossen!${NC}"
-echo -e "${YELLOW}🔗 Zugriff: https://$DOMAIN${NC}"
-echo -e "${YELLOW}👤 Admin: $NEXTCLOUD_ADMIN${NC}"
+# Installation abgeschlossen
+echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====\n${NC}"
+echo -e "Ihre Nextcloud ist unter ${GREEN}https://${DOMAIN_NAME}${NC} erreichbar."
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo -e "MariaDB Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+echo -e "Nextcloud Datenbank: ${GREEN}${NEXTCLOUD_DB_NAME}${NC}"
+echo -e "Nextcloud DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}" 
+echo -e "Nextcloud DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
+echo -e "\n${BLUE}Bitte sichern Sie diese Anmeldedaten an einem sicheren Ort!${NC}"
+echo -e "${BLUE}Aus Sicherheitsgründen sollten Sie für die Produktion ein offizielles SSL-Zertifikat einrichten.${NC}"
+echo -e "\nViel Erfolg mit Ihrer neuen Nextcloud-Installation!"
 echo -e "${YELLOW}🔑 Passwort: $NEXTCLOUD_ADMIN_PASS${NC}"
 echo -e "${YELLOW}🗄️ DB-Passwort: $NEXTCLOUD_DB_PASS${NC}"
 echo
