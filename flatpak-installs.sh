@@ -1,123 +1,160 @@
 #!/bin/bash
+# Maintainer: @Knilix
+# Beschreibung: Installiert Nextcloud, MariaDB, Redis, Apache2 mit Let's Encrypt in einem Debian-LXC-Container
+# Hinweis: Bestehende Installationen von Nextcloud, Redis oder MariaDB (nextcloud DB) werden erkannt und erfordern Bestätigung zur Löschung
 
-##################################################################
-#   Maintainer: Dein Name / Dein Unternehmen
-#   Version: 1.0
-#   Beschreibung: Installations- und Bereinigungs-Skript für Nextcloud,
-#   MariaDB, Redis sowie Aufräumprozesse. Löscht bei Erkennung einer
-#   bestehenden Installation alle relevanten Daten oder erstellt eine neue Datenbank.
-##################################################################
+# TEST ONLY!!!
 
-# Definiere Farben
-GRAY='\033[1;30m'
-NC='\033[0m' # No Color
+set -e
 
-# WARNUNG und Bestätigungsabfrage
-echo -e "${GRAY}WARNUNG: Eine bestehende Nextcloud-Installation und ihre Datenbank sowie Redis werden gelöscht, wenn diese erkannt wird. Dies löscht alle Daten!${NC}"
-read -p "Möchtest du fortfahren und die Installation löschen? (ja/nein): " confirmation
+# Farben
+GREEN="\e[32m"
+RED="\e[31m"
+YELLOW="\e[33m"
+GRAY="\e[90m"
+NC="\e[0m"
 
-if [[ "$confirmation" != "ja" ]]; then
-    echo -e "${GRAY}Abbruch. Keine Änderungen vorgenommen.${NC}"
-    exit 0
-fi
+# Konfig
+NEXTCLOUD_DB="nextcloud"
+NEXTCLOUD_DB_USER="nextcloud"
+NEXTCLOUD_DB_PASS="$(openssl rand -base64 32)"
+NEXTCLOUD_URL="nextcloud-script.home.lan"
+DATADIR="/var/www/nextcloud/data"
+NC_ADMIN_USER="admin"
+NC_ADMIN_PASS="$(openssl rand -base64 16)"
 
-# Überprüfe, ob Nextcloud bereits installiert ist
+# Vorbereitungen
+apt update && apt install -y sudo curl wget unzip gnupg2 software-properties-common lsb-release ca-certificates apt-transport-https lsb-release ufw fail2ban
+
+# Bestehende Installationen prüfen
+bestehend=false
+
+echo -e "${YELLOW}Prüfe auf bestehende Installationen...${NC}"
 if [ -d "/var/www/nextcloud" ]; then
-    echo -e "${GRAY}Nextcloud wurde erkannt. Lösche Dateien...${NC}"
-    rm -rf /var/www/nextcloud
+  echo -e "${RED}Vorhandene Nextcloud-Installation erkannt in /var/www/nextcloud${NC}"
+  bestehend=true
 fi
 
-# Überprüfe, ob die Datenbank 'nextcloud' existiert
-db_check=$(mysql -u root -p -e "SHOW DATABASES LIKE 'nextcloud';" | grep nextcloud)
-if [ "$db_check" != "" ]; then
-    echo -e "${GRAY}Datenbank 'nextcloud' wurde erkannt. Erstelle 'nextcloud1' und lösche 'nextcloud'...${NC}"
-    mysql -u root -p -e "CREATE DATABASE nextcloud1;"
-    mysql -u root -p -e "DROP DATABASE nextcloud;"
-    mysql -u root -p -e "DROP USER 'nextcloud'@'localhost';"
-else
-    echo -e "${GRAY}Keine bestehende 'nextcloud'-Datenbank gefunden. Es wird eine neue erstellt.${NC}"
-    mysql -u root -p -e "CREATE DATABASE nextcloud;"
+if mariadb -e "USE ${NEXTCLOUD_DB};" 2>/dev/null; then
+  echo -e "${RED}Datenbank '${NEXTCLOUD_DB}' ist bereits vorhanden${NC}"
+  bestehend=true
+  NEXTCLOUD_DB="nextcloud1"
+  echo -e "${YELLOW}Wechsle auf neue Datenbank: ${NEXTCLOUD_DB}${NC}"
 fi
 
-# Überprüfe, ob Redis läuft und lösche Redis-Cache
-if systemctl is-active --quiet redis; then
-    echo -e "${GRAY}Redis-Server erkannt. Lösche Redis-Daten...${NC}"
-    systemctl stop redis
-    rm -rf /var/lib/redis/*
-    systemctl start redis
+if [ -S /var/run/redis/redis-server.sock ]; then
+  echo -e "${RED}Redis scheint bereits installiert zu sein${NC}"
+  bestehend=true
 fi
 
-# Weiterhin: Aufräumen von temporären Dateien
-echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
-rm -r /opt/scriptfiles/testarea-main 2>/dev/null
-rm /opt/main.zip 2>/dev/null
+if [ "$bestehend" = true ]; then
+  echo -e "${YELLOW}Eine oder mehrere Komponenten sind bereits installiert.${NC}"
+  read -rp "Möchtest du diese Installationen entfernen und fortfahren? (j/n): " confirm
+  if [[ ! "$confirm" =~ ^[Jj]$ ]]; then
+    echo -e "${RED}Abbruch durch Benutzer.${NC}"
+    exit 1
+  fi
+  echo -e "${GRAY}Bereinige alte Installation...${NC}"
+  systemctl stop apache2 mariadb redis-server || true
+  rm -rf /var/www/nextcloud
+  mariadb -e "DROP DATABASE IF EXISTS ${NEXTCLOUD_DB}; DROP USER IF EXISTS '${NEXTCLOUD_DB_USER}'@'localhost';" || true
+  apt purge -y redis-server mariadb-server || true
+  apt autoremove -y
+  rm -rf /etc/redis /var/lib/mysql /var/run/redis
+fi
 
-# Installiere MariaDB und konfiguriere die Datenbank für Nextcloud
-echo -e "${GRAY}Installiere MariaDB...${NC}"
-apt update && apt install -y mariadb-server
+# Apache & PHP
+apt install -y apache2 libapache2-mod-php php php-gd php-json php-mysql php-curl php-mbstring php-intl php-imagick php-xml php-zip php-bcmath php-gmp php-apcu php-redis
 
-# MariaDB sichern und Benutzer/Datenbank für Nextcloud erstellen
-echo -e "${GRAY}MariaDB konfigurieren...${NC}"
-mysql_secure_installation
-mysql -u root -p -e "CREATE DATABASE nextcloud1;"
-mysql -u root -p -e "CREATE USER 'nextcloud'@'localhost' IDENTIFIED BY 'nextcloudpassword';"
-mysql -u root -p -e "GRANT ALL PRIVILEGES ON nextcloud1.* TO 'nextcloud'@'localhost';"
-mysql -u root -p -e "FLUSH PRIVILEGES;"
+# MariaDB
+apt install -y mariadb-server
+systemctl enable mariadb --now
 
-# Installiere Redis
-echo -e "${GRAY}Installiere Redis...${NC}"
+# Nextcloud DB
+mariadb -e "CREATE DATABASE ${NEXTCLOUD_DB};"
+mariadb -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASS}';"
+mariadb -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+mariadb -e "FLUSH PRIVILEGES;"
+
+# Redis
 apt install -y redis-server
+usermod -aG redis www-data
+systemctl enable redis-server --now
 
-# Installiere Apache, PHP und benötigte Module für Nextcloud
-echo -e "${GRAY}Installiere Apache und PHP...${NC}"
-apt install -y apache2 libapache2-mod-php php php-cli php-fpm php-json php-common php-mysql php-redis php-imagick php-mbstring php-xml php-zip php-curl php-bz2
+# SSL-Zertifikat
+apt install -y certbot python3-certbot-apache
+certbot --apache --noninteractive --agree-tos -m admin@${NEXTCLOUD_URL} -d ${NEXTCLOUD_URL} || true
 
-# Installiere Nextcloud
-echo -e "${GRAY}Lade Nextcloud herunter...${NC}"
-wget https://download.nextcloud.com/server/releases/nextcloud-25.0.3.tar.bz2 -P /tmp
-tar -xjf /tmp/nextcloud-25.0.3.tar.bz2 -C /var/www/
+# Nextcloud herunterladen
+cd /opt
+wget https://download.nextcloud.com/server/releases/latest.zip -O main.zip
+unzip main.zip
+rm main.zip
+mv nextcloud /var/www/
 chown -R www-data:www-data /var/www/nextcloud
 
-# Nextcloud konfigurieren
-echo -e "${GRAY}Nextcloud konfigurieren...${NC}"
-mkdir -p /var/www/nextcloud/data
-chown -R www-data:www-data /var/www/nextcloud/data
-
-# Apache für Nextcloud konfigurieren
-echo -e "${GRAY}Apache konfigurieren...${NC}"
-cat <<EOF > /etc/apache2/sites-available/nextcloud.conf
+# Apache konfigurieren
+cat <<EOF >/etc/apache2/sites-available/nextcloud.conf
 <VirtualHost *:80>
-    ServerAdmin webmaster@localhost
-    DocumentRoot /var/www/nextcloud
-    ServerName nextcloud.local
+    ServerName ${NEXTCLOUD_URL}
+    Redirect permanent / https://${NEXTCLOUD_URL}/
+</VirtualHost>
 
+<VirtualHost *:443>
+    ServerName ${NEXTCLOUD_URL}
+
+    DocumentRoot /var/www/nextcloud
     <Directory /var/www/nextcloud/>
-        Options +FollowSymlinks
-        AllowOverride All
         Require all granted
+        AllowOverride All
+        Options FollowSymLinks MultiViews
     </Directory>
 
-    ErrorLog ${APACHE_LOG_DIR}/error.log
-    CustomLog ${APACHE_LOG_DIR}/access.log combined
+    ErrorLog \${APACHE_LOG_DIR}/nextcloud_error.log
+    CustomLog \${APACHE_LOG_DIR}/nextcloud_access.log combined
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/${NEXTCLOUD_URL}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/${NEXTCLOUD_URL}/privkey.pem
 </VirtualHost>
 EOF
 
 a2ensite nextcloud.conf
-a2enmod rewrite
-systemctl restart apache2
+a2enmod rewrite headers env dir mime ssl
+systemctl reload apache2
 
-# Setze Nextcloud-Datenbankverbindung und Initialisiere
-echo -e "${GRAY}Nextcloud initialisieren...${NC}"
-sudo -u www-data php /var/www/nextcloud/occ maintenance:install --database "mysql" --database-name "nextcloud1" --database-user "nextcloud" --database-pass "nextcloudpassword" --admin-user "admin" --admin-pass "adminpassword"
+# Nextcloud installieren (occ)
+sudo -u www-data php /var/www/nextcloud/occ maintenance:install \
+  --database "mysql" \
+  --database-name "$NEXTCLOUD_DB" \
+  --database-user "$NEXTCLOUD_DB_USER" \
+  --database-pass "$NEXTCLOUD_DB_PASS" \
+  --admin-user "$NC_ADMIN_USER" \
+  --admin-pass "$NC_ADMIN_PASS"
 
-# Redis für Nextcloud konfigurieren
-echo -e "${GRAY}Redis konfigurieren...${NC}"
-echo "redis://localhost:6379" > /var/www/nextcloud/config/config.php
+# Nextcloud Konfiguration
+sudo -u www-data php /var/www/nextcloud/occ config:system:set trusted_domains 1 --value=${NEXTCLOUD_URL}
+sudo -u www-data php /var/www/nextcloud/occ config:system:set trusted_domains 2 --value=$(hostname -I | awk '{print $1}')
+sudo -u www-data php /var/www/nextcloud/occ config:system:set overwrite.cli.url --value=https://${NEXTCLOUD_URL}
+sudo -u www-data php /var/www/nextcloud/occ config:system:set memcache.local --value='\OC\Memcache\APCu'
+sudo -u www-data php /var/www/nextcloud/occ config:system:set memcache.locking --value='\OC\Memcache\Redis'
+sudo -u www-data php /var/www/nextcloud/occ config:system:set redis host --value=/var/run/redis/redis-server.sock
+sudo -u www-data php /var/www/nextcloud/occ config:system:set redis port --value=0 --type=integer
+
+# Firewall und Fail2ban (optional aktiviert)
+ufw allow OpenSSH
+ufw allow http
+ufw allow https
+ufw --force enable
+systemctl enable fail2ban --now
 
 # Bereinigung
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
-rm -r /opt/scriptfiles/testarea-main 2>/dev/null
-rm /opt/main.zip 2>/dev/null
+rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 
-echo -e "${GRAY}Installation abgeschlossen!${NC}"
+# Abschluss
+clear
+echo -e "${GREEN}Nextcloud erfolgreich installiert unter: https://${NEXTCLOUD_URL}${NC}"
+echo -e "${GREEN}Admin: ${NC_ADMIN_USER}${NC}, Passwort: ${NC_ADMIN_PASS}${NC}"
+echo -e "${GREEN}Datenbank: ${NEXTCLOUD_DB}, User: ${NEXTCLOUD_DB_USER}${NC}"
 
