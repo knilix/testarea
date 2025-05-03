@@ -77,7 +77,17 @@ apt install -y apache2 mariadb-server redis-server \
 # Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
 a2enmod rewrite headers env dir mime ssl
-a2enconf php8.2-fpm
+
+# Prüfen welche PHP-Version installiert ist und entsprechend konfigurieren
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+if [ -f "/etc/apache2/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
+  a2enconf "php${PHP_VERSION}-fpm"
+else
+  # Falls PHP-FPM conf nicht existiert, proxy_fcgi und setenvif Module aktivieren
+  a2enmod proxy_fcgi setenvif
+  a2enconf php-fpm
+fi
+
 systemctl restart apache2
 
 # MariaDB absichern und konfigurieren
@@ -115,7 +125,13 @@ systemctl restart redis-server
 
 # PHP für Nextcloud optimieren
 echo -e "${BLUE}[6/10] PHP für Nextcloud optimieren...${NC}"
-cat > /etc/php/8.2/fpm/conf.d/99-nextcloud.ini << EOF
+
+# PHP-Version ermitteln
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+PHP_FPM_SERVICE="php${PHP_VERSION}-fpm"
+
+# PHP-Konfiguration anpassen
+cat > /etc/php/${PHP_VERSION}/fpm/conf.d/99-nextcloud.ini << EOF
 memory_limit = 512M
 upload_max_filesize = 500M
 post_max_size = 500M
@@ -130,7 +146,11 @@ opcache.revalidate_freq=1
 EOF
 
 # PHP-FPM neustarten
-systemctl restart php8.2-fpm
+if systemctl list-units --full -all | grep -q "$PHP_FPM_SERVICE"; then
+  systemctl restart "$PHP_FPM_SERVICE"
+else
+  systemctl restart php-fpm
+fi
 
 # Apache Virtual Host für Nextcloud konfigurieren
 echo -e "${BLUE}[7/10] Apache Virtual Host für Nextcloud wird konfiguriert...${NC}"
