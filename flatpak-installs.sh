@@ -5,7 +5,7 @@
 #   Version: 1.0
 #   Beschreibung: Installations- und Bereinigungs-Skript für Nextcloud,
 #   MariaDB, Redis sowie Aufräumprozesse. Löscht bei Erkennung einer
-#   bestehenden Installation alle relevanten Daten.
+#   bestehenden Installation alle relevanten Daten oder erstellt eine neue Datenbank.
 ##################################################################
 
 # Definiere Farben
@@ -28,10 +28,15 @@ if [ -d "/var/www/nextcloud" ]; then
 fi
 
 # Überprüfe, ob die Datenbank 'nextcloud' existiert
-if mysql -u root -p -e "USE nextcloud"; then
-    echo -e "${GRAY}Datenbank 'nextcloud' wurde erkannt. Lösche die Datenbank...${NC}"
+db_check=$(mysql -u root -p -e "SHOW DATABASES LIKE 'nextcloud';" | grep nextcloud)
+if [ "$db_check" != "" ]; then
+    echo -e "${GRAY}Datenbank 'nextcloud' wurde erkannt. Erstelle 'nextcloud1' und lösche 'nextcloud'...${NC}"
+    mysql -u root -p -e "CREATE DATABASE nextcloud1;"
     mysql -u root -p -e "DROP DATABASE nextcloud;"
     mysql -u root -p -e "DROP USER 'nextcloud'@'localhost';"
+else
+    echo -e "${GRAY}Keine bestehende 'nextcloud'-Datenbank gefunden. Es wird eine neue erstellt.${NC}"
+    mysql -u root -p -e "CREATE DATABASE nextcloud;"
 fi
 
 # Überprüfe, ob Redis läuft und lösche Redis-Cache
@@ -54,9 +59,9 @@ apt update && apt install -y mariadb-server
 # MariaDB sichern und Benutzer/Datenbank für Nextcloud erstellen
 echo -e "${GRAY}MariaDB konfigurieren...${NC}"
 mysql_secure_installation
-mysql -u root -p -e "CREATE DATABASE nextcloud;"
+mysql -u root -p -e "CREATE DATABASE nextcloud1;"
 mysql -u root -p -e "CREATE USER 'nextcloud'@'localhost' IDENTIFIED BY 'nextcloudpassword';"
-mysql -u root -p -e "GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'localhost';"
+mysql -u root -p -e "GRANT ALL PRIVILEGES ON nextcloud1.* TO 'nextcloud'@'localhost';"
 mysql -u root -p -e "FLUSH PRIVILEGES;"
 
 # Installiere Redis
@@ -103,7 +108,7 @@ systemctl restart apache2
 
 # Setze Nextcloud-Datenbankverbindung und Initialisiere
 echo -e "${GRAY}Nextcloud initialisieren...${NC}"
-sudo -u www-data php /var/www/nextcloud/occ maintenance:install --database "mysql" --database-name "nextcloud" --database-user "nextcloud" --database-pass "nextcloudpassword" --admin-user "admin" --admin-pass "adminpassword"
+sudo -u www-data php /var/www/nextcloud/occ maintenance:install --database "mysql" --database-name "nextcloud1" --database-user "nextcloud" --database-pass "nextcloudpassword" --admin-user "admin" --admin-pass "adminpassword"
 
 # Redis für Nextcloud konfigurieren
 echo -e "${GRAY}Redis konfigurieren...${NC}"
@@ -115,3 +120,4 @@ rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
 
 echo -e "${GRAY}Installation abgeschlossen!${NC}"
+
