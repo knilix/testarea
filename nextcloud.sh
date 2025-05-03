@@ -3,111 +3,126 @@
 # Version: 1.0
 # Hinweis: Nur für Ubuntu/Debian (x64), root erforderlich
 
-set -e
+#!/bin/bash
 
-# === Farben ===
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[1;34m'
-NC='\033[0m' # No Color
+# Variablen definieren
+DB_ROOT_USER="root"
+DB_ROOT_PASS="root_password"  # Setze hier das Root-Passwort für MariaDB
+NC_DB_USER="ncuser"
+NC_DB_PASS="ncpassword"  # Setze hier das Passwort für den Nextcloud-Datenbankbenutzer
+NC_DB_NAME="nextcloud"
+NC_ADMIN_USER="admin"
+NC_ADMIN_PASS="admin_password"
+DOMAIN="yourdomain.com"  # Dein Domainname (für HTTPS)
+EMAIL="youremail@example.com"  # Deine E-Mail-Adresse für Let's Encrypt
 
-# === Eingabe ===
-echo -e "${BLUE}== Nextcloud Setup für Ubuntu/Debian ==${NC}"
-read -rp "Domain (z.B. cloud.example.com): " DOMAIN
-read -rp "E-Mail für Let's Encrypt: " EMAIL
+# UFW Konfiguration
+UFW_ALLOW="22,80,443"
 
-if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
-  echo -e "${RED}Domain oder E-Mail fehlt. Abbruch.${NC}"
-  exit 1
+# Installiere benötigte Pakete
+echo "Installiere notwendige Pakete..."
+apt update && apt upgrade -y
+apt install -y apache2 mariadb-server redis-server php php-cli php-fpm php-mysql php-redis php-json php-xml php-mbstring php-curl php-zip unzip curl gnupg2 lsb-release certbot python3-certbot-apache ufw fail2ban
+
+# MariaDB Setup
+echo "Einrichten von MariaDB..."
+mysql -u"$DB_ROOT_USER" -p"$DB_ROOT_PASS" -e "CREATE DATABASE IF NOT EXISTS $NC_DB_NAME;"
+mysql -u"$DB_ROOT_USER" -p"$DB_ROOT_PASS" -e "CREATE USER IF NOT EXISTS '$NC_DB_USER'@'localhost' IDENTIFIED BY '$NC_DB_PASS';"
+mysql -u"$DB_ROOT_USER" -p"$DB_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON $NC_DB_NAME.* TO '$NC_DB_USER'@'localhost';"
+mysql -u"$DB_ROOT_USER" -p"$DB_ROOT_PASS" -e "FLUSH PRIVILEGES;"
+
+# Überprüfen, ob der Benutzer Zugriff auf die Datenbank hat
+echo "Überprüfe Datenbankzugriff für $NC_DB_USER..."
+if mysql -u "$NC_DB_USER" -p"$NC_DB_PASS" -e "SHOW TABLES IN $NC_DB_NAME;" &>/dev/null; then
+    echo "Datenbankzugriff erfolgreich."
+else
+    echo "Fehler: Der Benutzer '$NC_DB_USER' hat keinen Zugriff auf die Datenbank '$NC_DB_NAME'."
+    exit 1
 fi
 
-# === Pakete installieren ===
-echo -e "${BLUE}[+] Installiere benötigte Pakete...${NC}"
-apt update
-apt install -y apache2 mariadb-server redis-server ufw fail2ban \
-  php php-{cli,gd,xml,mbstring,curl,zip,intl,bcmath,gmp,imagick,redis,mysql} \
-  unzip curl wget certbot python3-certbot-apache
-
-# === MariaDB vorbereiten ===
-echo -e "${BLUE}[+] Konfiguriere MariaDB...${NC}"
-NEXTCLOUD_DB="nextcloud"
-NEXTCLOUD_DB_USER="ncuser"
-NEXTCLOUD_DB_PASS="$(openssl rand -base64 18)"
-
-mysql -u root <<EOF
-CREATE DATABASE IF NOT EXISTS $NEXTCLOUD_DB CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-CREATE USER IF NOT EXISTS '$NEXTCLOUD_DB_USER'@'localhost' IDENTIFIED BY '$NEXTCLOUD_DB_PASS';
-GRANT ALL PRIVILEGES ON $NEXTCLOUD_DB.* TO '$NEXTCLOUD_DB_USER'@'localhost';
-FLUSH PRIVILEGES;
-EOF
-
-# === Nextcloud herunterladen ===
-echo -e "${BLUE}[+] Lade Nextcloud herunter...${NC}"
-cd /tmp
-wget https://download.nextcloud.com/server/releases/latest.zip -O nextcloud.zip
-
-if [[ ! -f nextcloud.zip ]]; then
-  echo -e "${RED}[!] Fehler beim Herunterladen von Nextcloud.${NC}"
-  exit 1
-fi
-
-unzip nextcloud.zip
-rm -rf /var/www/nextcloud
+# Installiere Nextcloud
+echo "Installiere Nextcloud..."
+cd /var/www
+curl -LO https://download.nextcloud.com/server/releases/nextcloud-26.0.0.zip
+unzip nextcloud-26.0.0.zip
 mv nextcloud /var/www/nextcloud
 chown -R www-data:www-data /var/www/nextcloud
+chmod -R 755 /var/www/nextcloud
 
-# === Apache konfigurieren ===
-echo -e "${BLUE}[+] Konfiguriere Apache...${NC}"
-cat >/etc/apache2/sites-available/nextcloud.conf <<EOF
+# Apache konfigurieren
+echo "Konfiguriere Apache..."
+cat <<EOL > /etc/apache2/sites-available/nextcloud.conf
 <VirtualHost *:80>
-  ServerName $DOMAIN
-  DocumentRoot /var/www/nextcloud
-  <Directory /var/www/nextcloud>
-    Require all granted
-    AllowOverride All
-    Options FollowSymLinks MultiViews
-  </Directory>
+    ServerName $DOMAIN
+    DocumentRoot /var/www/nextcloud
+    <Directory /var/www/nextcloud>
+        Options +FollowSymlinks
+        AllowOverride All
+        Require all granted
+    </Directory>
 </VirtualHost>
-EOF
+EOL
 
-a2ensite nextcloud
-a2enmod rewrite headers env dir mime setenvif ssl
-systemctl reload apache2
+a2ensite nextcloud.conf
+a2enmod rewrite headers env dir mime
 
-# === Nextcloud installieren ===
-echo -e "${BLUE}[+] Starte Nextcloud Installation...${NC}"
-NEXTCLOUD_ADMIN="admin"
-NEXTCLOUD_ADMIN_PASS="$(openssl rand -base64 18)"
+# Redis Konfiguration
+echo "Konfiguriere Redis für Nextcloud..."
+sed -i "s/;session.save_handler = files/session.save_handler = redis/" /etc/php/*/fpm/php.ini
+sed -i "s/;session.save_path = \"/var/lib/php/sessions\"/session.save_path = \"\"/g" /etc/php/*/fpm/php.ini
+echo "session.save_path = \"tcp://localhost:6379\"" >> /etc/php/*/fpm/php.ini
 
-sudo -u www-data php /var/www/nextcloud/occ maintenance:install \
-  --database "mysql" \
-  --database-name "$NEXTCLOUD_DB" \
-  --database-user "$NEXTCLOUD_DB_USER" \
-  --database-pass "$NEXTCLOUD_DB_PASS" \
-  --admin-user "$NEXTCLOUD_ADMIN" \
-  --admin-pass "$NEXTCLOUD_ADMIN_PASS" \
-  --data-dir "/var/www/nextcloud/data"
+# HTTPS mit Let's Encrypt
+echo "Einrichten von HTTPS mit Let's Encrypt..."
+certbot --apache -d $DOMAIN --email $EMAIL --agree-tos --no-eff-email
 
-# === Redis Konfiguration ===
-echo -e "${BLUE}[+] Konfiguriere Redis...${NC}"
-CONFIG="/var/www/nextcloud/config/config.php"
-cp "$CONFIG" "${CONFIG}.bak"
-
-sed -i "/);/i\
-  'memcache.local' => '\\\\OC\\\\Memcache\\\\Redis',\n  'memcache.locking' => '\\\\OC\\\\Memcache\\\\Redis',\n  'redis' => array (\n    'host' => '127.0.0.1',\n    'port' => 6379,\n  )," "$CONFIG"
-
-# === Let's Encrypt HTTPS ===
-echo -e "${BLUE}[+] Beantrage TLS-Zertifikat...${NC}"
-certbot --apache --non-interactive --agree-tos -m "$EMAIL" --redirect -d "$DOMAIN"
-
-# === Firewall & Fail2Ban ===
-echo -e "${BLUE}[+] Konfiguriere UFW & Fail2Ban...${NC}"
+# UFW einrichten
+echo "Einrichten der Firewall (UFW)..."
 ufw allow OpenSSH
 ufw allow 80,443/tcp
-ufw --force enable
-systemctl enable --now fail2ban
+ufw enable
 
+# Fail2Ban einrichten
+echo "Einrichten von Fail2Ban..."
+systemctl enable fail2ban
+systemctl start fail2ban
+
+# Nextcloud installieren und konfigurieren
+echo "Installiere und konfiguriere Nextcloud..."
+sudo -u www-data php /var/www/nextcloud/occ maintenance:install --database "mysql" --database-name "$NC_DB_NAME" --database-user "$NC_DB_USER" --database-pass "$NC_DB_PASS" --admin-user "$NC_ADMIN_USER" --admin-pass "$NC_ADMIN_PASS" --data-dir "/var/nc_data"
+
+# Weiterleitungen in Apache konfigurieren
+echo "Füge Weiterleitungen für HTTPS hinzu..."
+cat <<EOL >> /etc/apache2/sites-available/nextcloud.conf
+<VirtualHost *:443>
+    ServerName $DOMAIN
+    DocumentRoot /var/www/nextcloud
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/$DOMAIN/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/$DOMAIN/privkey.pem
+    <Directory /var/www/nextcloud>
+        Options +FollowSymlinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+EOL
+
+a2ensite nextcloud.conf
+a2enmod ssl
+
+# Apache neu starten
+echo "Starte Apache neu..."
+systemctl restart apache2
+
+# Bestätigung der Installation
+echo "Nextcloud wurde erfolgreich installiert und ist unter https://$DOMAIN erreichbar."
+echo "Die Datenbankbenutzerinformationen:"
+echo "Datenbank: $NC_DB_NAME"
+echo "Benutzer: $NC_DB_USER"
+echo "Passwort: $NC_DB_PASS"
+echo "Admin Benutzer: $NC_ADMIN_USER"
+echo "Admin Passwort: $NC_ADMIN_PASS"
 # === Abschluss ===
 echo -e "\n${GREEN}Installation abgeschlossen!${NC}"
 echo -e "${YELLOW}Zugriff: https://$DOMAIN${NC}"
