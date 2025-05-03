@@ -59,11 +59,13 @@ NEXTCLOUD_URL="https://download.nextcloud.com/server/releases/latest.zip"
 # Ausgabe zur Kontrolle der URL
 echo -e "${YELLOW}[i] Download-URL: $NEXTCLOUD_URL${NC}"
 
-wget "$NEXTCLOUD_URL" -O nextcloud.zip
+# Versuch, Nextcloud herunterzuladen, mit Fehlerausgabe
+wget "$NEXTCLOUD_URL" -O nextcloud.zip 2>&1 | tee download.log
 
 # Prüfen, ob der Download erfolgreich war
 if [[ ! -f nextcloud.zip ]]; then
   echo -e "${RED}[!] Fehler: Nextcloud konnte nicht heruntergeladen werden.${NC}"
+  echo -e "${RED} Fehlerprotokoll: ${NC} download.log"
   exit 1
 fi
 
