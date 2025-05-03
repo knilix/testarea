@@ -99,9 +99,28 @@ mysql -e "DELETE FROM mysql.user WHERE User='';"
 mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
 mysql -e "DROP DATABASE IF EXISTS test;"
 mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
-mysql -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
-mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
-mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+
+# Prüfen, ob die Nextcloud-Datenbank bereits existiert
+DB_EXISTS=$(mysql -e "SHOW DATABASES LIKE '${NEXTCLOUD_DB_NAME}';" | grep -o "${NEXTCLOUD_DB_NAME}" || echo "")
+if [ -z "$DB_EXISTS" ]; then
+  echo -e "${GREEN}Erstelle neue Datenbank: ${NEXTCLOUD_DB_NAME}${NC}"
+  mysql -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+else
+  echo -e "${BLUE}Datenbank ${NEXTCLOUD_DB_NAME} existiert bereits. Überspringe Erstellung...${NC}"
+fi
+
+# Prüfen, ob der Datenbankbenutzer bereits existiert
+USER_EXISTS=$(mysql -e "SELECT User FROM mysql.user WHERE User='${NEXTCLOUD_DB_USER}';" | grep -o "${NEXTCLOUD_DB_USER}" || echo "")
+if [ -z "$USER_EXISTS" ]; then
+  echo -e "${GREEN}Erstelle neuen Datenbankbenutzer: ${NEXTCLOUD_DB_USER}${NC}"
+  mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
+  mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+else
+  echo -e "${BLUE}Benutzer ${NEXTCLOUD_DB_USER} existiert bereits. Setze Passwort und Rechte...${NC}"
+  mysql -e "SET PASSWORD FOR '${NEXTCLOUD_DB_USER}'@'localhost' = PASSWORD('${NEXTCLOUD_DB_PASSWORD}');"
+  mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+fi
+
 mysql -e "FLUSH PRIVILEGES;"
 
 # MariaDB für Nextcloud optimieren
