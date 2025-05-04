@@ -68,13 +68,17 @@ generate_password() {
 }
 
 MYSQL_ROOT_PASSWORD=$(generate_password 32)
+NEXTCLOUD_DB_USER="nextcloud"  # Direct assignment instead of self-reference
 NEXTCLOUD_DB_PASSWORD=$(generate_password 32)
 NEXTCLOUD_DB_NAME="nextcloud"
-NEXTCLOUD_DB_USER="nextcloud"
 NEXTCLOUD_ADMIN_USER="admin"
 NEXTCLOUD_ADMIN_PASSWORD=$(generate_password 16)
 NEXTCLOUD_DATA_DIR="/var/www/nextcloud/data"
 CREDENTIALS_FILE="/root/.nextcloud_credentials"
+
+# Backup-Verzeichnis für Konfigurationsdateien
+BACKUP_DIR="/root/nextcloud_install_backup_$(date +%Y%m%d%H%M%S)"
+mkdir -p "$BACKUP_DIR"
 # 30. Befehl zum Anzeigen der Anmeldedaten erstellen
 cat > /usr/local/bin/nextcloud-credentials << 'EOF'
 #!/bin/bash
