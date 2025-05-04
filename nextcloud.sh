@@ -356,13 +356,19 @@ apt-get update -qq
 apt-get install -y "php${PHP_VERSION}-gmp"
 
 echo "Prüfe und installiere SVG-Unterstützung für Imagick ..."
-apt-get install -y "php${PHP_VERSION}-imagick"
 apt-get install -y libmagickcore-6.q16-6-extra
 
 # Apache & PHP neu laden, wenn vorhanden
 echo "Starte Apache und PHP-FPM neu (falls installiert) ..."
-systemctl reload apache2 2>/dev/null || true
-systemctl restart php${PHP_VERSION}-fpm 2>/dev/null || true
+if systemctl list-units --type=service | grep -q "apache2.service"; then
+  echo " Starte Apache neu ..."
+  systemctl reload apache2
+fi
+
+if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm.service"; then
+  echo " Starte PHP-FPM neu ..."
+  systemctl restart "php${PHP_VERSION}-fpm"
+fi
 
 ## 4
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
