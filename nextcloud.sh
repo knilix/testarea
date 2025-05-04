@@ -1,9 +1,9 @@
 #!/bin/bash
-# Maintainer: @knilix
+# Maintainer: @knilix (Original), erweitert für Debian und Ubuntu
 # Version: 1.0
-# Hinweis: Nur für Debian 12 (x64), root erforderlich
+# Hinweis: Für Debian 12 und Ubuntu 22.04+ (x64), root erforderlich
 #
-# Nextcloud Autoinstallation Script für Debian 12
+# Nextcloud Autoinstallation Script für Debian und Ubuntu
 # Mit MariaDB und Redis Cache
 # ---------------------------------
 
@@ -24,9 +24,31 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 4. Prüfen ob Debian 12
-if [ ! -f /etc/debian_version ] || [ "$(cut -d'.' -f1 < /etc/debian_version)" -ne 12 ]; then
-  echo -e "${RED}Dieses Script ist nur für Debian 12 konzipiert.${NC}"
+# 4. Betriebssystem erkennen und prüfen
+if [ ! -f /etc/os-release ]; then
+  echo -e "${RED}Konnte Betriebssystem nicht erkennen. Das Script benötigt Debian 12 oder Ubuntu 22.04+.${NC}"
+  exit 1
+fi
+
+# OS-Typ ermitteln (Debian oder Ubuntu)
+if grep -q "Ubuntu" /etc/os-release; then
+  OS_TYPE="Ubuntu"
+  OS_VERSION=$(grep -oP '(?<=VERSION_ID=").*?(?=")' /etc/os-release)
+  if (( $(echo "$OS_VERSION < 22.04" | bc -l) )); then
+    echo -e "${RED}Dieses Script benötigt Ubuntu 22.04 oder neuer. Erkannte Version: $OS_VERSION${NC}"
+    exit 1
+  fi
+  echo -e "${BLUE}Ubuntu $OS_VERSION erkannt. Fahre fort...${NC}"
+elif grep -q "Debian" /etc/os-release; then
+  OS_TYPE="Debian"
+  OS_VERSION=$(grep -oP '(?<=VERSION_ID=").*?(?=")' /etc/os-release)
+  if (( $(echo "$OS_VERSION < 12" | bc -l) )); then
+    echo -e "${RED}Dieses Script benötigt Debian 12 oder neuer. Erkannte Version: $OS_VERSION${NC}"
+    exit 1
+  fi
+  echo -e "${BLUE}Debian $OS_VERSION erkannt. Fahre fort...${NC}"
+else
+  echo -e "${RED}Dieses Script unterstützt nur Debian oder Ubuntu. Erkanntes System: $(grep -oP '(?<=^ID=).+' /etc/os-release)${NC}"
   exit 1
 fi
 
@@ -50,7 +72,7 @@ fi
 clear
 
 # 7. Installationsparameter anzeigen
-echo -e "${BLUE}=== Nextcloud Installationsscript für Debian 12 ===${NC}"
+echo -e "${BLUE}=== Nextcloud Installationsscript für $OS_TYPE ====${NC}"
 echo -e "${BLUE}Dieses Script installiert Nextcloud mit MariaDB und Redis.${NC}\n"
 echo -e "${GREEN}Installationsparameter:${NC}"
 # echo -e "Domain: ${GREEN}$DOMAIN_NAME${NC}"
@@ -71,46 +93,99 @@ apt update && apt upgrade -y
 
 # 10. Benötigte Pakete installieren
 echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
+# Ensure bc is installed (needed for version comparison)
+apt install -y bc
+
+# Install other requirements
 apt install -y apache2 mariadb-server redis-server \
   php php-cli php-common php-fpm php-json php-intl php-imagick \
   php-curl php-mbstring php-zip php-xml php-gd php-mysql \
-  php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv
+  php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra
 
 # 11. Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
 a2enmod rewrite headers env dir mime ssl
 
+# Detect PHP version
 PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
 if [ -f "/etc/apache2/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
   a2enconf "php${PHP_VERSION}-fpm"
 else
   a2enmod proxy_fcgi setenvif
-  a2enconf php-fpm
+  a2enconf php${PHP_VERSION}-fpm
 fi
 
 systemctl restart apache2
 
 # 13. MariaDB konfigurieren
 echo -e "${BLUE}[4/10] MariaDB wird konfiguriert...${NC}"
-mysql -e "SET PASSWORD FOR root@localhost = PASSWORD('${MYSQL_ROOT_PASSWORD}');"
-mysql -e "DELETE FROM mysql.user WHERE User='';"
-mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
-mysql -e "DROP DATABASE IF EXISTS test;"
-mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
 
-DB_EXISTS=$(mysql -e "SHOW DATABASES LIKE '${NEXTCLOUD_DB_NAME}';" | grep -o "${NEXTCLOUD_DB_NAME}" || echo "")
-if [ -z "$DB_EXISTS" ]; then
-  mysql -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+# Systemspezifische MariaDB-Konfiguration
+if [ "$OS_TYPE" = "Debian" ]; then
+  # Debian-spezifische Konfiguration
+  mysql -e "SET PASSWORD FOR root@localhost = PASSWORD('${MYSQL_ROOT_PASSWORD}');"
+  mysql -e "DELETE FROM mysql.user WHERE User='';"
+  mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+  mysql -e "DROP DATABASE IF EXISTS test;"
+  mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+  
+  DB_EXISTS=$(mysql -e "SHOW DATABASES LIKE '${NEXTCLOUD_DB_NAME}';" | grep -o "${NEXTCLOUD_DB_NAME}" || echo "")
+  if [ -z "$DB_EXISTS" ]; then
+    mysql -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+  fi
+  
+  USER_EXISTS=$(mysql -e "SELECT User FROM mysql.user WHERE User='${NEXTCLOUD_DB_USER}';" | grep -o "${NEXTCLOUD_DB_USER}" || echo "")
+  if [ -z "$USER_EXISTS" ]; then
+    mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
+  fi
+  mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+  mysql -e "FLUSH PRIVILEGES;"
+else
+  # Ubuntu-spezifische Konfiguration
+  if mysql -e "SELECT 1;" &>/dev/null; then
+    # Root hat noch kein Passwort
+    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"
+  else
+    # Root hat bereits ein Passwort oder eine andere Authentifizierungsmethode
+    echo "MariaDB scheint bereits konfiguriert zu sein. Passwort wird aktualisiert."
+    mysqladmin -u root password "${MYSQL_ROOT_PASSWORD}" || true
+  fi
+  
+  # Weitere Datenbank-Konfiguration
+  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.user WHERE User='';"
+  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DROP DATABASE IF EXISTS test;"
+  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+  
+  DB_EXISTS=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SHOW DATABASES LIKE '${NEXTCLOUD_DB_NAME}';" | grep -o "${NEXTCLOUD_DB_NAME}" || echo "")
+  if [ -z "$DB_EXISTS" ]; then
+    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+  fi
+  
+  USER_EXISTS=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT User FROM mysql.user WHERE User='${NEXTCLOUD_DB_USER}';" | grep -o "${NEXTCLOUD_DB_USER}" || echo "")
+  if [ -z "$USER_EXISTS" ]; then
+    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
+  fi
+  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
+  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;"
 fi
 
-USER_EXISTS=$(mysql -e "SELECT User FROM mysql.user WHERE User='${NEXTCLOUD_DB_USER}';" | grep -o "${NEXTCLOUD_DB_USER}" || echo "")
-if [ -z "$USER_EXISTS" ]; then
-  mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
+# MariaDB-Konfigurationspfad prüfen und erstellen falls nötig
+if [ ! -d "/etc/mysql/mariadb.conf.d" ]; then
+  # Bei Ubuntu könnte es auch unter /etc/mysql/conf.d sein
+  if [ -d "/etc/mysql/conf.d" ]; then
+    MARIADB_CONF_DIR="/etc/mysql/conf.d"
+  else
+    # Erstelle das Verzeichnis, falls es nicht existiert
+    mkdir -p "/etc/mysql/mariadb.conf.d"
+    MARIADB_CONF_DIR="/etc/mysql/mariadb.conf.d"
+  fi
+else
+  MARIADB_CONF_DIR="/etc/mysql/mariadb.conf.d"
 fi
-mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
 
-cat > /etc/mysql/mariadb.conf.d/99-nextcloud.cnf << EOF
+# MariaDB-Konfiguration für Nextcloud
+cat > "${MARIADB_CONF_DIR}/99-nextcloud.cnf" << EOF
 [mysqld]
 transaction_isolation = READ-COMMITTED
 binlog_format = ROW
@@ -120,13 +195,41 @@ innodb_file_per_table=1
 max_allowed_packet = 128M
 EOF
 
+# Neustart von MariaDB, um Änderungen anzuwenden
+if systemctl list-units --type=service | grep -q "mariadb.service"; then
+  systemctl restart mariadb
+else
+  systemctl restart mysql  # Fallback für manche Ubuntu-Versionen
+fi
+
 # 17. Redis konfigurieren
 echo -e "${BLUE}[5/10] Redis wird konfiguriert...${NC}"
-sed -i "s/port 6379/port 0/" /etc/redis/redis.conf
-sed -i "s/# unixsocket/unixsocket/" /etc/redis/redis.conf
-sed -i "s/# unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
+
+# Pfad der Redis-Konfiguration überprüfen
+if [ -f "/etc/redis/redis.conf" ]; then
+  REDIS_CONF="/etc/redis/redis.conf"
+elif [ -f "/etc/redis/redis-server.conf" ]; then  # Einige Ubuntu-Versionen verwenden diesen Pfad
+  REDIS_CONF="/etc/redis/redis-server.conf"
+else
+  echo -e "${RED}Redis-Konfigurationsdatei nicht gefunden.${NC}"
+  exit 1
+fi
+
+# Redis konfigurieren
+sed -i "s/port 6379/port 0/" $REDIS_CONF
+sed -i "s/# unixsocket/unixsocket/" $REDIS_CONF
+sed -i "s/# unixsocketperm 700/unixsocketperm 770/" $REDIS_CONF
 usermod -a -G redis www-data
-systemctl restart redis-server
+
+# Redis-Servicename überprüfen und neustarten
+if systemctl list-units --type=service | grep -q "redis-server.service"; then
+  systemctl restart redis-server
+elif systemctl list-units --type=service | grep -q "redis.service"; then
+  systemctl restart redis
+else
+  echo -e "${RED}Redis-Service nicht gefunden.${NC}"
+  exit 1
+fi
 
 # [6/10] PHP für Nextcloud optimieren
 echo -e "${BLUE}[6/10] PHP-Konfiguration für Nextcloud optimieren...${NC}"
@@ -197,10 +300,9 @@ cat > /etc/apache2/sites-available/nextcloud.conf << EOF
 </VirtualHost>
 EOF
 
-a2enmod headers
+a2enmod headers ssl
 a2ensite nextcloud.conf
 systemctl reload apache2
-
 
 # 24. Nextcloud installieren
 echo -e "${BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...${NC}"
@@ -288,9 +390,22 @@ EOF
 chmod +x /usr/local/bin/nextcloud-credentials
 
 # 33. Redis Socket-Perm prüfen
-if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
-  sed -i "s/^unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
-  systemctl restart redis-server
+# Redis-Konfigurationspfad bestimmen
+if [ -f "/etc/redis/redis.conf" ]; then
+  REDIS_CONF="/etc/redis/redis.conf"
+elif [ -f "/etc/redis/redis-server.conf" ]; then
+  REDIS_CONF="/etc/redis/redis-server.conf"
+fi
+
+if [ -n "$REDIS_CONF" ] && grep -q "^unixsocketperm 700" "$REDIS_CONF"; then
+  sed -i "s/^unixsocketperm 700/unixsocketperm 770/" "$REDIS_CONF"
+  
+  # Redis-Service neu starten
+  if systemctl list-units --type=service | grep -q "redis-server.service"; then
+    systemctl restart redis-server
+  elif systemctl list-units --type=service | grep -q "redis.service"; then
+    systemctl restart redis
+  fi
 fi
 
 #######################################################################################################################################################################
@@ -338,9 +453,6 @@ if [ -f "$config_file" ]; then
 else
   echo "Die Konfigurationsdatei $config_file wurde nicht gefunden!"
 fi
-
-## 2
-# --> verschoben zu 4
 
 ##3 Nachtrag PHP-Module für Nextcloud
 PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
@@ -429,17 +541,17 @@ done
 echo # Um die Zeile zu beenden
 
 # Log bereinigen (wird automatisch neu angelegt)
-rm /var/www/nextcloud/data/nextcloud.log
+rm -f /var/www/nextcloud/data/nextcloud.log
 
 # Zusätzliche Anfrage an den Server senden, um die Sitzung zu initialisieren
-curl -s -o /dev/null http://localhost
+curl -s -o /dev/null http://localhost || true
 
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
 #######################################################################################################################################################################
 
 # Bereinigen
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
-rm -rf /opt/scriptfiles/testarea-main /opt/main.zip
+rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 
 # 34. Abschlussmeldung
 clear
