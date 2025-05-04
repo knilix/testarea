@@ -340,7 +340,7 @@ else
 fi
 
 ## 2
-sudo -u www-data php occ maintenance:repair --include-expensive
+# --> verschoben zu 4
 
 ##3 Nachtrag PHP-Module für Nextcloud
 PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
@@ -410,6 +410,9 @@ echo
 echo " Nun noch einen Erststart von cron.php."
 
 ## 4
+sudo -u www-data php occ maintenance:repair --include-expensive
+
+## 5
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
 
 
