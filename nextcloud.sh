@@ -177,6 +177,11 @@ cat > /etc/apache2/sites-available/nextcloud.conf << EOF
     SSLEngine on
     SSLCertificateFile /etc/ssl/nextcloud/nextcloud.crt
     SSLCertificateKeyFile /etc/ssl/nextcloud/nextcloud.key
+
+    <IfModule mod_headers.c>
+        Header always set Strict-Transport-Security "max-age=15552000; includeSubDomains"
+    </IfModule>
+
     <Directory /var/www/nextcloud>
         Options +FollowSymlinks
         AllowOverride All
@@ -187,13 +192,16 @@ cat > /etc/apache2/sites-available/nextcloud.conf << EOF
         SetEnv HOME /var/www/nextcloud
         SetEnv HTTP_HOME /var/www/nextcloud
     </Directory>
+
     ErrorLog \${APACHE_LOG_DIR}/nextcloud_error.log
     CustomLog \${APACHE_LOG_DIR}/nextcloud_access.log combined
 </VirtualHost>
 EOF
 
+a2enmod headers
 a2ensite nextcloud.conf
 systemctl reload apache2
+
 
 # 24. Nextcloud installieren
 echo -e "${BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...${NC}"
