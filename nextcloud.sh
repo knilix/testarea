@@ -7,7 +7,7 @@
 # Nextcloud Autoinstallation Script für Debian 12
 # Mit MariaDB und Redis Cache
 # ---------------------------------
-clear
+
 # 1. Fehler-Handling
 set -e
 trap 'echo "Ein Fehler ist aufgetreten. Installation wurde abgebrochen."' ERR
@@ -48,6 +48,8 @@ DOMAIN_NAME=$(hostname -f)
 if [ "$DOMAIN_NAME" = "localhost" ] || [ -z "$DOMAIN_NAME" ]; then
   DOMAIN_NAME=$SERVER_IP
 fi
+
+clear
 
 # 7. Installationsparameter anzeigen
 echo -e "${BLUE}=== Nextcloud Installationsscript für Debian 12 ===${NC}"
