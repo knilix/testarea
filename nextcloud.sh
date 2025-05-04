@@ -430,13 +430,14 @@ echo # Um die Zeile zu beenden
 
 # Log bereinigen (wird automatisch neu angelegt)
 rm /var/www/nextcloud/data/nextcloud.log
-# cron.php einmalig anschieben
-sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
 
 # Zusätzliche Anfrage an den Server senden, um die Sitzung zu initialisieren
 curl -s -o /dev/null http://localhost
 
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
+
+# cron.php einmalig anschieben
+sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
 #######################################################################################################################################################################
 
 # 34. Abschlussmeldung
