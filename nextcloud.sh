@@ -342,8 +342,31 @@ fi
 ## 2
 sudo -u www-data php occ maintenance:repair --include-expensive
 
-## 3
+##3
+echo "Behebe empfohlene PHP-Modul-Probleme für Nextcloud ..."
+
+# PHP-Version automatisch erkennen
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+
+# Fehlermeldungen vorbeugen
+set -e
+
+echo "Installiere php-gmp ..."
+apt-get update -qq
+apt-get install -y "php${PHP_VERSION}-gmp"
+
+echo "Prüfe und installiere SVG-Unterstützung für Imagick ..."
+apt-get install -y "php${PHP_VERSION}-imagick"
+apt-get install -y libmagickcore-6.q16-6-extra
+
+# Apache & PHP neu laden, wenn vorhanden
+echo "Starte Apache und PHP-FPM neu (falls installiert) ..."
+systemctl reload apache2 2>/dev/null || true
+systemctl restart php${PHP_VERSION}-fpm 2>/dev/null || true
+
+## 4
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
+
 
 # 34. Abschlussmeldung
 clear
