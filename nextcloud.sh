@@ -417,9 +417,16 @@ sudo systemctl restart apache2
 
 # Fortschrittsbalken für die Wartezeit
 echo "Warte, bis der Webserver vollständig hochgefahren ist..."
-echo -n "Wartezeit: "
-# Der Fortschrittsbalken läuft für 10 Sekunden
-echo {1..100} | pv -qL 10 > /dev/null
+
+# Manuelle Schleife für den Fortschrittsbalken
+# Anzahl der Schritte (dauert insgesamt 10 Sekunden)
+TOTAL_STEPS=10
+for i in $(seq 1 $TOTAL_STEPS); do
+    echo -n "#"
+    sleep 1
+done
+
+echo # Um die Zeile zu beenden
 
 # Log bereinigen (wird automatisch neu angelegt)
 rm /var/www/nextcloud/data/nextcloud.log
