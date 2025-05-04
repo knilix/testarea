@@ -119,16 +119,14 @@ if grep -q "memcache.locking" "$CONFIG_PATH"; then
       
       # Redis-Konfiguration anpassen
       echo -e "${GRAY}Passe Redis-Konfiguration an...${NC}"
-      sed -i 's/port 6379/port 0/' /etc/redis/redis.conf
-      sed -i 's|# unixsocket /var/run/redis/redis-server.sock|unixsocket /var/run/redis/redis-server.sock|' /etc/redis/redis.conf
-      # Stelle sicher, dass unixsocketperm auf 770 gesetzt ist, unabhängig vom aktuellen Wert
-      if grep -q "unixsocketperm 700" /etc/redis/redis.conf; then
-        sed -i 's/unixsocketperm 700/unixsocketperm 770/' /etc/redis/redis.conf
-      elif grep -q "# unixsocketperm 700" /etc/redis/redis.conf; then
-        sed -i 's/# unixsocketperm 700/unixsocketperm 770/' /etc/redis/redis.conf
+      sed -i 's/^port .*/port 0/' /etc/redis/redis.conf
+      sed -i 's|^#\? *unixsocket .*|unixsocket /var/run/redis/redis-server.sock|' /etc/redis/redis.conf
+
+      # unixsocketperm 770 setzen oder ersetzen
+      if grep -qE '^\s*#?\s*unixsocketperm' /etc/redis/redis.conf; then
+        sed -i -E 's/^\s*#?\s*unixsocketperm\s+[0-9]+/unixsocketperm 770/' /etc/redis/redis.conf
       else
-        # Falls der Eintrag in einem anderen Format existiert oder fehlt
-        sed -i '/unixsocket .*redis.*sock/a unixsocketperm 770' /etc/redis/redis.conf
+        sed -i '/^unixsocket /a unixsocketperm 770' /etc/redis/redis.conf
       fi
       
       # www-data zur redis-Gruppe hinzufügen
