@@ -325,6 +325,36 @@ EOF
 
 chmod +x /usr/local/bin/nextcloud-credentials
 
+echo "Füge Nextcloud Konfiguration hinzu"
+
+# Füge die Konfiguration in die config.php ein
+config_file="/var/www/nextcloud/config/config.php"
+
+# Überprüfen, ob die config.php existiert
+if [ -f "$config_file" ]; then
+  # Füge die Konfiguration vor der letzten schließenden Klammer ein
+  sed -i "/^);$/i \ 
+  'default_phone_region' => 'DE', \n
+  'enable_previews' => true, \n
+  'enabledPreviewProviders' => \n
+  array ( \n
+    0 => 'OC\\\\Preview\\\\PNG', \n
+    1 => 'OC\\\\Preview\\\\JPEG', \n
+    2 => 'OC\\\\Preview\\\\GIF', \n
+    3 => 'OC\\\\Preview\\\\BMP', \n
+    4 => 'OC\\\\Preview\\\\XBitmap', \n
+    5 => 'OC\\\\Preview\\\\MP3', \n
+    6 => 'OC\\\\Preview\\\\TXT', \n
+    7 => 'OC\\\\Preview\\\\MarkDown', \n
+    8 => 'OC\\\\Preview\\\\OpenDocument', \n
+    9 => 'OC\\\\Preview\\\\Krita', \n
+    10 => 'OC\\\\Preview\\\\HEIC', \n
+  ), \n
+  'maintenance_window_start' => 1," $config_file
+else
+  echo "Die Konfigurationsdatei $config_file wurde nicht gefunden!"
+fi
+
 # 33. Überprüfen und Berechtigungen in redis.conf korrigieren, falls nötig
 echo -e "${BLUE}Prüfe unixsocketperm in /etc/redis/redis.conf...${NC}"
 
