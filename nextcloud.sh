@@ -171,6 +171,9 @@ opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
 
+# Hinzugefügte Speichergrenze
+echo "max_input_vars = 5000" >> /etc/php/${PHP_VERSION}/fpm/conf.d/99-nextcloud.ini
+
 # 19. PHP-FPM neustarten
 if systemctl list-units --full -all | grep -q "$PHP_FPM_SERVICE"; then
   systemctl restart "$PHP_FPM_SERVICE"
