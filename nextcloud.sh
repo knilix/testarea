@@ -145,7 +145,7 @@ EOF
 echo -e "${BLUE}[5/10] Redis wird konfiguriert...${NC}"
 sed -i "s/port 6379/port 0/" /etc/redis/redis.conf
 sed -i "s/# unixsocket/unixsocket/" /etc/redis/redis.conf
-sed -i "s/# unixsocketperm 770/unixsocketperm 770/" /etc/redis/redis.conf
+sed -i "s/# unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
 usermod -a -G redis www-data
 systemctl restart redis-server
 
@@ -322,7 +322,21 @@ EOF
 
 chmod +x /usr/local/bin/nextcloud-credentials
 
-# 33. Installation abgeschlossen
+# 33. Überprüfen und Berechtigungen in redis.conf korrigieren, falls nötig
+echo -e "${BLUE}Prüfe unixsocketperm in /etc/redis/redis.conf...${NC}"
+
+# Suche nach der Zeile 'unixsocketperm' und prüfe, ob sie 770 ist
+if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
+  echo -e "${BLUE}Berechtigung 'unixsocketperm' ist auf 700 gesetzt, ändere auf 770...${NC}"
+  sed -i "s/^unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
+  systemctl restart redis-server  # Redis neu starten, um die Änderungen zu übernehmen
+else
+  echo -e "${BLUE}Berechtigung 'unixsocketperm' ist bereits korrekt oder nicht 700.${NC}"
+fi
+# Redis neu starten, damit die Änderungen wirksam werden
+systemctl restart redis-server
+
+# 34. Installation abgeschlossen
 echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====\n${NC}"
 echo -e "Ihre Nextcloud ist unter folgenden URLs erreichbar:"
 echo -e "Domain: ${GREEN}https://${DOMAIN_NAME}${NC}"
@@ -337,20 +351,6 @@ echo -e "\n${BLUE}Diese Anmeldedaten wurden in ${CREDENTIALS_FILE} gespeichert.$
 echo -e "${BLUE}Sie können sie jederzeit mit dem Befehl 'nextcloud-credentials' anzeigen.${NC}"
 echo -e "${BLUE}Aus Sicherheitsgründen sollten Sie für die Produktion ein offizielles SSL-Zertifikat einrichten.${NC}"
 
-# 34. Überprüfen und Berechtigungen in redis.conf korrigieren, falls nötig
-echo -e "${BLUE}Prüfe unixsocketperm in /etc/redis/redis.conf...${NC}"
-
-# Suche nach der Zeile 'unixsocketperm' und prüfe, ob sie 700 ist
-if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
-  echo -e "${BLUE}Berechtigung 'unixsocketperm' ist auf 700 gesetzt, ändere auf 770...${NC}"
-  sed -i "s/^unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
-  systemctl restart redis-server  # Redis neu starten, um die Änderungen zu übernehmen
-else
-  echo -e "${BLUE}Berechtigung 'unixsocketperm' ist bereits korrekt oder nicht 700.${NC}"
-fi
-# Redis neu starten, damit die Änderungen wirksam werden
-systemctl restart redis-server
-
 # 35. Aufräumen
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
 rm -r /opt/scriptfiles/testarea-main 2>/dev/null
@@ -360,3 +360,4 @@ echo
 echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
 echo
 echo -e "\nViel Erfolg mit Ihrer neuen Nextcloud-Installation!"
+echo
