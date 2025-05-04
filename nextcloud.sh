@@ -7,7 +7,7 @@
 # Nextcloud Autoinstallation Script für Debian 12
 # Mit MariaDB und Redis Cache
 # ---------------------------------
-
+clear
 # 1. Fehler-Handling
 set -e
 trap 'echo "Ein Fehler ist aufgetreten. Installation wurde abgebrochen."' ERR
