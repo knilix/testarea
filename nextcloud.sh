@@ -129,23 +129,33 @@ sed -i "s/# unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
 usermod -a -G redis www-data
 systemctl restart redis-server
 
-# 18. PHP optimieren
-echo -e "${BLUE}[6/10] PHP für Nextcloud optimieren...${NC}"
-cat > /etc/php/${PHP_VERSION}/fpm/conf.d/99-nextcloud.ini << EOF
+# [6/10] PHP für Nextcloud optimieren
+echo -e "${BLUE}[6/10] PHP-Konfiguration für Nextcloud optimieren...${NC}"
+for sapi in fpm cli apache2; do
+    if [ -d "/etc/php/${PHP_VERSION}/$sapi/conf.d" ]; then
+        echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
+        cat > /etc/php/${PHP_VERSION}/$sapi/conf.d/99-nextcloud.ini << EOF
 memory_limit = 512M
 upload_max_filesize = 500M
 post_max_size = 500M
 max_execution_time = 300
 date.timezone = Europe/Berlin
+
 opcache.enable=1
-opcache.interned_strings_buffer=16
+opcache.interned_strings_buffer=32
 opcache.max_accelerated_files=10000
 opcache.memory_consumption=128
 opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
+    fi
+done
 
-systemctl restart php${PHP_VERSION}-fpm
+# PHP-FPM neustarten (wichtig für Änderungen)
+if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm"; then
+    echo -e "${BLUE}→ PHP-FPM wird neu gestartet...${NC}"
+    systemctl restart php${PHP_VERSION}-fpm
+fi
 
 # 20. Apache Virtual Host konfigurieren
 echo -e "${BLUE}[7/10] Apache Virtual Host für Nextcloud wird konfiguriert...${NC}"
