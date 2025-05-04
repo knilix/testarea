@@ -435,12 +435,11 @@ rm /var/www/nextcloud/data/nextcloud.log
 curl -s -o /dev/null http://localhost
 
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
-
-#echo
-#echo "PHP-Cronjob wird einmalig angeschoben"
-# cron.php einmalig anschieben
-# su -s /bin/bash www-data -c "/usr/bin/php /var/www/nextcloud/cron.php" >/dev/null 2>&1
 #######################################################################################################################################################################
+
+# Bereinigen
+echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+rm -rf /opt/scriptfiles/testarea-main /opt/main.zip
 
 # 34. Abschlussmeldung
 clear
