@@ -415,6 +415,8 @@ sudo -u www-data php occ maintenance:repair --include-expensive
 ## 5
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
 
+## 6 Log löschen für einen Neubeginn (wird automatisch neu angelegt)
+rm /var/www/nextcloud/data/nextcloud.log
 
 # 34. Abschlussmeldung
 clear
