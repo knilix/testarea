@@ -294,6 +294,10 @@ if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
   systemctl restart redis-server
 fi
 
+# Zusatz, in letzter Minute
+sudo -u www-data php occ maintenance:repair --include-expensive
+
+
 # 34. Abschlussmeldung
 clear
 echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====${NC}"
