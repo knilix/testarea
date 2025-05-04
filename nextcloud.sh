@@ -51,7 +51,7 @@ clear
 
 # 7. Installationsparameter anzeigen
 echo -e "${BLUE}=== Nextcloud Installationsscript für Debian 12 ===${NC}"
-echo -e "${BLUE}Dieses Script installiert automatisch Nextcloud mit MariaDB und Redis.${NC}\n"
+echo -e "${BLUE}Dieses Script installiert Nextcloud mit MariaDB und Redis.${NC}\n"
 echo -e "${GREEN}Installationsparameter:${NC}"
 # echo -e "Domain: ${GREEN}$DOMAIN_NAME${NC}"
 echo -e "IP-Adresse: ${GREEN}$SERVER_IP${NC}"
