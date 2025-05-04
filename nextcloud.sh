@@ -443,8 +443,21 @@ rm -rf /opt/scriptfiles/testarea-main /opt/main.zip
 
 # 34. Abschlussmeldung
 clear
+echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
+# echo -e "Nextcloud URL (Domain): ${GREEN}${NEXTCLOUD_URL_DOMAIN}${NC}"
+echo -e "Nextcloud URL (IP): ${GREEN}${NEXTCLOUD_URL_IP}${NC}"
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo -e "\n${BLUE}MariaDB Datenbank:${NC}"
+echo -e "Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+echo -e "Datenbank: ${GREEN}${NEXTCLOUD_DB_NAME}${NC}"
+echo -e "DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}" 
+echo -e "DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
+echo -e "\nInstalliert am: ${GREEN}${INSTALLATION_DATE}${NC}"
+echo
 echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====${NC}"
 echo -e "Sie können sich nun unter folgendem Link anmelden:\n"
-echo -e "Domain: ${BLUE}https://${DOMAIN_NAME}${NC}"
+# echo -e "Domain: ${BLUE}https://${DOMAIN_NAME}${NC}"
 echo -e "IP:     ${BLUE}https://${SERVER_IP}${NC}"
 echo -e "\nBenutzen Sie den Befehl ${GREEN}nextcloud-credentials${NC}, um Ihre Zugangsdaten anzuzeigen."
+echo
