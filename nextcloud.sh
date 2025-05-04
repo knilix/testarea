@@ -342,33 +342,70 @@ fi
 ## 2
 sudo -u www-data php occ maintenance:repair --include-expensive
 
-##3
-echo "Behebe empfohlene PHP-Modul-Probleme für Nextcloud ..."
-
-# PHP-Version automatisch erkennen
+##3 Nachtrag PHP-Module für Nextcloud
 PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
 
-# Fehlermeldungen vorbeugen
-set -e
+has_php_module() {
+  php -m | grep -iq "^$1\$"
+}
 
-echo "Installiere php-gmp ..."
+has_imagick_svg_support() {
+  php -r "if (extension_loaded('imagick')) { \$v = new Imagick(); echo in_array('SVG', \$v->queryFormats()) ? 'yes' : 'no'; } else { echo 'no'; }"
+}
+
+install_gmp=false
+install_svg_support=false
+install_imagick=false
+
+if has_php_module "gmp"; then
+  echo "✅ php-gmp ist bereits installiert."
+else
+  echo "❌ php-gmp fehlt."
+  install_gmp=true
+fi
+
+if has_php_module "imagick"; then
+  echo "✅ php-imagick ist installiert."
+  if [ "$(has_imagick_svg_support)" == "yes" ]; then
+    echo "✅ imagick unterstützt SVG."
+  else
+    echo "❌ imagick hat keine SVG-Unterstützung."
+    install_svg_support=true
+  fi
+else
+  echo "❌ php-imagick fehlt."
+  install_imagick=true
+  install_svg_support=true
+fi
+
+# echo " Installiere erforderliche Pakete ..."
 apt-get update -qq
-apt-get install -y "php${PHP_VERSION}-gmp"
 
-echo "Prüfe und installiere SVG-Unterstützung für Imagick ..."
-apt-get install -y libmagickcore-6.q16-6-extra
+if $install_gmp; then
+  apt-get install -y "php${PHP_VERSION}-gmp"
+fi
 
-# Apache & PHP neu laden, wenn vorhanden
-echo "Starte Apache und PHP-FPM neu (falls installiert) ..."
+if $install_imagick; then
+  apt-get install -y "php${PHP_VERSION}-imagick"
+fi
+
+if $install_svg_support; then
+  apt-get install -y libmagickcore-6.q16-6-extra
+fi
+
+echo " Dienste neu starten (falls vorhanden) ..."
+
 if systemctl list-units --type=service | grep -q "apache2.service"; then
-  echo " Starte Apache neu ..."
+  echo "🔄 Starte Apache neu ..."
   systemctl reload apache2
 fi
 
 if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm.service"; then
-  echo " Starte PHP-FPM neu ..."
+  echo "🔄 Starte PHP-FPM neu ..."
   systemctl restart "php${PHP_VERSION}-fpm"
 fi
+
+echo " Fertig. PHP-Module aktualisiert und Dienste neu geladen."
 
 ## 4
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
