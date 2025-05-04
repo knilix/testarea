@@ -415,9 +415,11 @@ sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
 sudo -u www-data php occ maintenance:repair --include-expensive
 sudo systemctl restart apache2
 
+# Fortschrittsbalken für die Wartezeit
 echo "Warte, bis der Webserver vollständig hochgefahren ist..."
 echo -n "Wartezeit: "
-echo {1..10} | pv -qL 1 > /dev/null
+# Der Fortschrittsbalken läuft für 10 Sekunden
+echo {1..100} | pv -qL 10 > /dev/null
 
 # Log bereinigen (wird automatisch neu angelegt)
 rm /var/www/nextcloud/data/nextcloud.log
