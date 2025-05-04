@@ -293,7 +293,8 @@ if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
   systemctl restart redis-server
 fi
 
-# Zusatz, in letzter Minute
+#######################################################################################################################################################################
+# Zusatz, in letzter Minute hinzugefügt
 ## 1
 echo "Füge Nextcloud Konfiguration hinzu"
 
@@ -411,11 +412,18 @@ echo " Nun noch einen Erststart von cron.php."
 ## 4
 sudo -u www-data php occ maintenance:repair --include-expensive
 
-## 5
-sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
-
-## 6 Log löschen für einen Neubeginn (wird automatisch neu angelegt)
+## 5 Letzter Feinschliff
+# Zwingen, den Cache zu leeren und den Webserver neu zu starten
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
+sudo -u www-data php /var/www/nextcloud/occ cache:clear
+sudo systemctl restart apache2
+sleep 10
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
+# Log bereinigen (wird automatisch neu angelegt)
 rm /var/www/nextcloud/data/nextcloud.log
+# cron.php einmalig anschieben
+sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
+#######################################################################################################################################################################
 
 # 34. Abschlussmeldung
 clear
