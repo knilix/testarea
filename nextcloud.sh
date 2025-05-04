@@ -2,7 +2,7 @@
 
 # Maintainer: @knilix
 # Version: 1.0
-# Hinweis: Nur für Debian (x64), root erforderlich
+# Hinweis: Nur für Debian 12 (x64), root erforderlich
 #
 # Nextcloud Autoinstallation Script für Debian 12
 # Mit MariaDB und Redis Cache
