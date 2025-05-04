@@ -49,7 +49,7 @@ if [ "$DOMAIN_NAME" = "localhost" ] || [ -z "$DOMAIN_NAME" ]; then
   DOMAIN_NAME=$SERVER_IP
 fi
 
-clear
+clear # für einen sauberen Start
 
 # 7. Installationsparameter anzeigen
 echo -e "${BLUE}=== Nextcloud Installationsscript für Debian 12 ===${NC}"
@@ -335,6 +335,8 @@ else
 fi
 # Redis neu starten, damit die Änderungen wirksam werden
 systemctl restart redis-server
+
+clear # für eine saubere Bildschirmanzeige
 
 # 34. Installation abgeschlossen
 echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====\n${NC}"
