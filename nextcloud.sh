@@ -295,8 +295,54 @@ if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
 fi
 
 # Zusatz, in letzter Minute
+## 1
+echo "Füge Nextcloud Konfiguration hinzu"
+
+config_file="/var/www/nextcloud/config/config.php"
+
+if [ -f "$config_file" ]; then
+  echo "Füge Konfiguration in config.php ein"
+
+  # Temporäre Datei erzeugen
+  tmp_file=$(mktemp)
+
+  # Konfiguration vor der letzten Klammer einfügen
+  awk '
+    /^\);$/ {
+      print "  '\''default_phone_region'\'' => '\''DE'\'',";
+      print "  '\''enable_previews'\'' => true,";
+      print "  '\''enabledPreviewProviders'\'' => array (";
+      print "    0 => '\''OC\\\\\\\\Preview\\\\\\\\PNG'\'',";
+      print "    1 => '\''OC\\\\\\\\Preview\\\\\\\\JPEG'\'',";
+      print "    2 => '\''OC\\\\\\\\Preview\\\\\\\\GIF'\'',";
+      print "    3 => '\''OC\\\\\\\\Preview\\\\\\\\BMP'\'',";
+      print "    4 => '\''OC\\\\\\\\Preview\\\\\\\\XBitmap'\'',";
+      print "    5 => '\''OC\\\\\\\\Preview\\\\\\\\MP3'\'',";
+      print "    6 => '\''OC\\\\\\\\Preview\\\\\\\\TXT'\'',";
+      print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
+      print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
+      print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
+      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
+      print "  ),";
+      print "  '\''maintenance_window_start'\'' => 1,";
+    }
+    { print }
+  ' "$config_file" > "$tmp_file"
+
+  # Backup und Überschreiben
+  cp "$config_file" "${config_file}.bak"
+  cp "$tmp_file" "$config_file"
+  rm "$tmp_file"
+
+  echo "Konfiguration erfolgreich eingefügt in $config_file"
+else
+  echo "Die Konfigurationsdatei $config_file wurde nicht gefunden!"
+fi
+
+## 2
 sudo -u www-data php occ maintenance:repair --include-expensive
 
+## 3
 
 # 34. Abschlussmeldung
 clear
