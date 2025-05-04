@@ -358,22 +358,22 @@ install_svg_support=false
 install_imagick=false
 
 if has_php_module "gmp"; then
-  echo "✅ php-gmp ist bereits installiert."
+  echo " php-gmp ist bereits installiert."
 else
-  echo "❌ php-gmp fehlt."
+  echo " php-gmp fehlt."
   install_gmp=true
 fi
 
 if has_php_module "imagick"; then
-  echo "✅ php-imagick ist installiert."
+  echo " php-imagick ist installiert."
   if [ "$(has_imagick_svg_support)" == "yes" ]; then
-    echo "✅ imagick unterstützt SVG."
+    echo " imagick unterstützt SVG."
   else
-    echo "❌ imagick hat keine SVG-Unterstützung."
+    echo " imagick hat keine SVG-Unterstützung."
     install_svg_support=true
   fi
 else
-  echo "❌ php-imagick fehlt."
+  echo " php-imagick fehlt."
   install_imagick=true
   install_svg_support=true
 fi
@@ -396,16 +396,18 @@ fi
 echo " Dienste neu starten (falls vorhanden) ..."
 
 if systemctl list-units --type=service | grep -q "apache2.service"; then
-  echo "🔄 Starte Apache neu ..."
+  echo " Starte Apache neu ..."
   systemctl reload apache2
 fi
 
 if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm.service"; then
-  echo "🔄 Starte PHP-FPM neu ..."
+  echo " Starte PHP-FPM neu ..."
   systemctl restart "php${PHP_VERSION}-fpm"
 fi
 
 echo " Fertig. PHP-Module aktualisiert und Dienste neu geladen."
+echo
+echo " Nun noch einen Erststart von cron.php."
 
 ## 4
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
