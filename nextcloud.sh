@@ -337,7 +337,19 @@ echo -e "\n${BLUE}Diese Anmeldedaten wurden in ${CREDENTIALS_FILE} gespeichert.$
 echo -e "${BLUE}Sie können sie jederzeit mit dem Befehl 'nextcloud-credentials' anzeigen.${NC}"
 echo -e "${BLUE}Aus Sicherheitsgründen sollten Sie für die Produktion ein offizielles SSL-Zertifikat einrichten.${NC}"
 
-# 34. Aufräumen
+# 34. Überprüfen und Berechtigungen in redis.conf korrigieren, falls nötig
+echo -e "${BLUE}Prüfe unixsocketperm in /etc/redis/redis.conf...${NC}"
+
+# Suche nach der Zeile 'unixsocketperm' und prüfe, ob sie 700 ist
+if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
+  echo -e "${BLUE}Berechtigung 'unixsocketperm' ist auf 700 gesetzt, ändere auf 770...${NC}"
+  sed -i "s/^unixsocketperm 700/unixsocketperm 770/" /etc/redis/redis.conf
+  systemctl restart redis-server  # Redis neu starten, um die Änderungen zu übernehmen
+else
+  echo -e "${BLUE}Berechtigung 'unixsocketperm' ist bereits korrekt oder nicht 700.${NC}"
+fi
+
+# 35. Aufräumen
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
 rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
