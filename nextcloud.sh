@@ -72,8 +72,372 @@ NEXTCLOUD_DB_USER=${NEXTCLOUD_DB_USER}
 NEXTCLOUD_DB_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
 BACKUP_DIR=${BACKUP_DIR}
 INSTALLATION_DATE=$(date +"%Y-%m-%d %H:%M:%S")
-SYSTEM_INFO="RAM: ${RAM_MB}MB, CPU: $(nproc) Kerne, Disk: ${DISK_GB}GB frei"
-EOFPASSWORD=$(generate_password 32)
+PHP_VERSION=${PHP_VERSION}
+EOF
+chmod 600 "${CREDENTIALS_FILE}"
+
+# 30. Befehl zum Anzeigen der Anmeldedaten erstellen
+cat > /usr/local/bin/nextcloud-credentials << 'EOF'
+#!/bin/bash
+if [ "$EUID" -ne 0 ]; then
+  echo "Bitte als root ausführen (sudo nextcloud-credentials)"
+  exit 1
+fi
+
+CRED_FILE="/root/.nextcloud_credentials"
+if [ ! -f "$CRED_FILE" ]; then
+  echo "Keine Nextcloud-Anmeldedaten gefunden!"
+  exit 1
+fi
+
+source "$CRED_FILE"
+
+# Farben für die Ausgabe
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
+echo -e "Nextcloud URL (Domain): ${GREEN}${NEXTCLOUD_URL_DOMAIN}${NC}"
+echo -e "Nextcloud URL (IP): ${GREEN}${NEXTCLOUD_URL_IP}${NC}"
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo -e "\n${BLUE}MariaDB Datenbank:${NC}"
+echo -e "Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+echo -e "Datenbank: ${GREEN}${NEXTCLOUD_DB_NAME}${NC}"
+echo -e "DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}" 
+echo -e "DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
+echo -e "\nInstalliert am: ${GREEN}${INSTALLATION_DATE}${NC}"
+echo -e "\nBackup-Verzeichnis: ${YELLOW}${BACKUP_DIR}${NC}"
+echo -e "\nPHP-Version: ${GREEN}${PHP_VERSION}${NC}"
+EOF
+
+chmod +x /usr/local/bin/nextcloud-credentials
+
+# 31. System-Status-Check-Tool erstellen
+cat > /usr/local/bin/nextcloud-status << 'EOF'
+#!/bin/bash
+if [ "$EUID" -ne 0 ]; then
+  echo "Bitte als root ausführen (sudo nextcloud-status)"
+  exit 1
+fi
+
+# Farben für die Ausgabe
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}===== Nextcloud System Status =====${NC}\n"
+
+# PHP-Version
+PHP_VERSION=$(php -r "echo PHP_VERSION;")
+echo -e "PHP Version: ${GREEN}${PHP_VERSION}${NC}"
+
+# Apache Status
+APACHE_STATUS=$(systemctl is-active apache2)
+if [ "$APACHE_STATUS" = "active" ]; then
+  echo -e "Apache Status: ${GREEN}Aktiv${NC}"
+else
+  echo -e "Apache Status: ${RED}Inaktiv${NC}"
+fi
+
+# MariaDB Status
+MARIADB_STATUS=$(systemctl is-active mariadb)
+if [ "$MARIADB_STATUS" = "active" ]; then
+  echo -e "MariaDB Status: ${GREEN}Aktiv${NC}"
+else
+  echo -e "MariaDB Status: ${RED}Inaktiv${NC}"
+fi
+
+# Redis Status
+REDIS_STATUS=$(systemctl is-active redis-server)
+if [ "$REDIS_STATUS" = "active" ]; then
+  echo -e "Redis Status: ${GREEN}Aktiv${NC}"
+else
+  echo -e "Redis Status: ${RED}Inaktiv${NC}"
+fi
+
+# Speicherplatz
+echo -e "\n${BLUE}Speicherplatz:${NC}"
+df -h / | awk 'NR==2 {print "Gesamt: " $2 "   Benutzt: " $3 "   Frei: " $4 "   Prozent: " $5}'
+
+# RAM
+echo -e "\n${BLUE}Arbeitsspeicher:${NC}"
+free -h | grep "Mem:" | awk '{print "Gesamt: " $2 "   Benutzt: " $3 "   Frei: " $4 "   Cache: " $6}'
+
+# CPU-Auslastung
+echo -e "\n${BLUE}CPU-Auslastung:${NC}"
+top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4 "% benutzt, " $6 + $8 + $10 "% frei"}'
+
+# Nextcloud Version
+if [ -f /var/www/nextcloud/version.php ]; then
+  NC_VERSION=$(grep "OC_VersionString" /var/www/nextcloud/version.php | cut -d\' -f2)
+  echo -e "\nNextcloud Version: ${GREEN}${NC_VERSION}${NC}"
+fi
+
+# Nextcloud Status Check
+echo -e "\n${BLUE}Nextcloud Health Check:${NC}"
+if [ -d /var/www/nextcloud ]; then
+  cd /var/www/nextcloud
+  sudo -u www-data php occ status
+  echo -e "\n${BLUE}Nextcloud Integritätscheck:${NC}"
+  sudo -u www-data php occ integrity:check-core
+else
+  echo -e "${RED}Nextcloud scheint nicht installiert zu sein!${NC}"
+fi
+
+# Letzter Login
+echo -e "\n${BLUE}Letzte Logins:${NC}"
+last -n 5 | head
+
+# Check für wichtige Updates
+echo -e "\n${BLUE}Verfügbare Updates:${NC}"
+apt update -qq > /dev/null
+UPDATES=$(apt list --upgradable 2>/dev/null | grep -c "upgradable")
+SECURITY=$(apt list --upgradable 2>/dev/null | grep -c "security")
+
+if [ "$UPDATES" -gt 0 ]; then
+  echo -e "${YELLOW}$UPDATES Pakete können aktualisiert werden (davon $SECURITY Sicherheitsupdates)${NC}"
+  echo -e "Führen Sie 'apt upgrade' aus, um diese zu installieren."
+else
+  echo -e "${GREEN}System ist aktuell.${NC}"
+fi
+
+echo -e "\n${BLUE}===== Status-Check abgeschlossen =====\n${NC}"
+EOF
+
+chmod +x /usr/local/bin/nextcloud-status
+
+# 32. Automatisches Update-Script erstellen
+cat > /usr/local/bin/nextcloud-update << 'EOF'
+#!/bin/bash
+if [ "$EUID" -ne 0 ]; then
+  echo "Bitte als root ausführen (sudo nextcloud-update)"
+  exit 1
+fi
+
+# Farben für die Ausgabe
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}===== Nextcloud Update wird ausgeführt =====\n${NC}"
+
+# Backup erstellen
+BACKUP_DIR="/root/nextcloud_backup_$(date +%Y%m%d%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+
+echo -e "${YELLOW}Erstelle Backup in $BACKUP_DIR...${NC}"
+mysqldump --single-transaction -h localhost -u root $(cat /root/.nextcloud_credentials | grep NEXTCLOUD_DB_NAME | cut -d= -f2) > "$BACKUP_DIR/nextcloud-sqlbkp.bak"
+rsync -a /var/www/nextcloud "$BACKUP_DIR/"
+
+# Nextcloud in Wartungsmodus versetzen
+echo -e "${BLUE}Aktiviere Wartungsmodus...${NC}"
+cd /var/www/nextcloud
+sudo -u www-data php occ maintenance:mode --on
+
+# Update durchführen
+echo -e "${BLUE}Führe Update durch...${NC}"
+sudo -u www-data php occ upgrade
+
+# Wenn Update erfolgreich, Wartungsmodus deaktivieren
+if [ $? -eq 0 ]; then
+  echo -e "${GREEN}Update erfolgreich!${NC}"
+  sudo -u www-data php occ maintenance:mode --off
+  sudo -u www-data php occ maintenance:repair
+  sudo -u www-data php occ db:add-missing-indices
+  sudo -u www-data php occ db:add-missing-columns
+  sudo -u www-data php occ db:convert-filecache-bigint
+  echo -e "${GREEN}Wartungsmodus wurde deaktiviert.${NC}"
+else
+  echo -e "${RED}Update fehlgeschlagen! Wartungsmodus bleibt aktiviert.${NC}"
+  echo -e "${YELLOW}Bitte prüfen Sie die Logs für weitere Informationen.${NC}"
+  echo -e "${YELLOW}Backup wurde in $BACKUP_DIR erstellt.${NC}"
+  exit 1
+fi
+
+echo -e "\n${BLUE}===== Update abgeschlossen =====\n${NC}"
+EOF
+
+chmod +x /usr/local/bin/nextcloud-update
+
+# 33. Dokumentation erstellen
+mkdir -p /root/nextcloud-docs
+cat > /root/nextcloud-docs/README.md << EOF
+# Nextcloud Dokumentation
+
+## Installation
+Nextcloud wurde automatisch installiert am $(date +"%Y-%m-%d %H:%M:%S") mit folgenden Parametern:
+- Domain: https://${DOMAIN_NAME}
+- IP: https://${SERVER_IP}
+- PHP-Version: ${PHP_VERSION}
+- Datenbank: MariaDB
+- Cache: Redis
+
+## Wichtige Verzeichnisse
+- Nextcloud-Installation: /var/www/nextcloud
+- Daten-Verzeichnis: ${NEXTCLOUD_DATA_DIR}
+- Konfiguration: /var/www/nextcloud/config/config.php
+- Logs: /var/log/nextcloud.log
+
+## Nützliche Befehle
+- Zugangsdaten anzeigen: \`sudo nextcloud-credentials\`
+- System-Status prüfen: \`sudo nextcloud-status\`
+- Nextcloud aktualisieren: \`sudo nextcloud-update\`
+
+## Sicherheitshinweise
+- Ein selbstsigniertes SSL-Zertifikat wurde erstellt. Für Produktivumgebungen sollte ein offizielles Zertifikat (z.B. Let's Encrypt) verwendet werden.
+- Die Firewall (UFW) wurde konfiguriert, um nur SSH, HTTP und HTTPS zuzulassen.
+- Backup-Verzeichnis: ${BACKUP_DIR}
+
+## Wichtige Dateien
+- Apache Konfiguration: /etc/apache2/sites-available/nextcloud.conf
+- PHP Konfiguration: /etc/php/${PHP_VERSION}/fpm/conf.d/99-nextcloud.ini
+- MariaDB Konfiguration: /etc/mysql/mariadb.conf.d/99-nextcloud.cnf
+- Redis Konfiguration: /etc/redis/redis.conf
+EOF
+
+# 34. Let's Encrypt Auto-Setup vorbereiten (optional)
+cat > /usr/local/bin/nextcloud-ssl << 'EOF'
+#!/bin/bash
+if [ "$EUID" -ne 0 ]; then
+  echo "Bitte als root ausführen (sudo nextcloud-ssl)"
+  exit 1
+fi
+
+# Farben für die Ausgabe
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}===== Let's Encrypt SSL für Nextcloud =====\n${NC}"
+
+# Domain abfragen
+read -p "Bitte geben Sie Ihre Domain ein (z.B. cloud.example.com): " DOMAIN
+
+if [ -z "$DOMAIN" ]; then
+  echo -e "${RED}Keine Domain angegeben. Abbruch.${NC}"
+  exit 1
+fi
+
+# Prüfen, ob Domain erreichbar ist
+echo -e "${YELLOW}Prüfe, ob Domain $DOMAIN erreichbar ist...${NC}"
+if ! host $DOMAIN &>/dev/null; then
+  echo -e "${RED}Die Domain $DOMAIN scheint nicht auf diesen Server zu zeigen.${NC}"
+  echo -e "${YELLOW}Bitte stellen Sie sicher, dass die DNS-Einstellungen korrekt sind.${NC}"
+  read -p "Trotzdem fortfahren? (j/N): " CONTINUE
+  if [[ $CONTINUE != "j" && $CONTINUE != "J" ]]; then
+    echo -e "${RED}Installation abgebrochen.${NC}"
+    exit 1
+  fi
+fi
+
+# Certbot installieren
+echo -e "${BLUE}Installiere Certbot...${NC}"
+apt update
+apt install -y certbot python3-certbot-apache
+
+# Zertifikat beantragen
+echo -e "${BLUE}Beantrage Zertifikat für $DOMAIN...${NC}"
+certbot --apache -d $DOMAIN
+
+# Prüfen, ob Zertifikat erfolgreich installiert wurde
+if [ $? -eq 0 ]; then
+  echo -e "${GREEN}SSL-Zertifikat wurde erfolgreich installiert!${NC}"
+  
+  # Auto-Renewal testen
+  echo -e "${BLUE}Teste Auto-Renewal...${NC}"
+  certbot renew --dry-run
+  
+  # Nextcloud Config anpassen
+  echo -e "${BLUE}Konfiguriere Nextcloud für HTTPS...${NC}"
+  cd /var/www/nextcloud
+  sudo -u www-data php occ config:system:set overwriteprotocol --value="https"
+  sudo -u www-data php occ config:system:set trusted_domains 0 --value="$DOMAIN"
+  
+  echo -e "${GREEN}Einrichtung abgeschlossen! Nextcloud ist nun über https://$DOMAIN erreichbar.${NC}"
+else
+  echo -e "${RED}Fehler beim Beantragen des Zertifikats.${NC}"
+  echo -e "${YELLOW}Bitte prüfen Sie die Logs für weitere Informationen.${NC}"
+fi
+
+echo -e "\n${BLUE}===== SSL-Setup abgeschlossen =====\n${NC}"
+EOF
+
+chmod +x /usr/local/bin/nextcloud-ssl
+
+# 35. Überprüfen Sie die Installation und führen Sicherheitschecks durch
+log "info" "Führe Sicherheitschecks durch..."
+
+# Apache-Module prüfen
+if ! apache2ctl -M | grep -q "ssl_module"; then
+  log "warning" "Apache SSL-Modul ist nicht aktiviert. Aktiviere es..."
+  a2enmod ssl
+  systemctl restart apache2
+fi
+
+# PHP-Module prüfen
+MISSING_PHP_MODULES=""
+for module in curl gd mbstring xml zip intl mysql redis; do
+  if ! php -m | grep -q "$module"; then
+    MISSING_PHP_MODULES+="php-$module "
+  fi
+done
+
+if [ ! -z "$MISSING_PHP_MODULES" ]; then
+  log "warning" "Fehlende PHP-Module: $MISSING_PHP_MODULES. Installiere sie..."
+  apt install -y $MISSING_PHP_MODULES
+  systemctl restart $PHP_FPM_SERVICE
+fi
+
+# Redis-Socket-Berechtigungen prüfen
+if [ ! -S /var/run/redis/redis-server.sock ]; then
+  log "warning" "Redis-Socket nicht gefunden. Starte Redis neu..."
+  systemctl restart redis-server
+else
+  REDIS_SOCKET_PERMS=$(stat -c "%a" /var/run/redis/redis-server.sock)
+  if [ "$REDIS_SOCKET_PERMS" != "770" ]; then
+    log "warning" "Falsche Redis-Socket-Berechtigungen: $REDIS_SOCKET_PERMS. Korrigiere..."
+    chmod 770 /var/run/redis/redis-server.sock
+  fi
+fi
+
+# 36. Aufräumen
+log "info" "Bereinige temporäre Dateien..."
+rm -f /tmp/nextcloud*
+apt autoremove -y
+apt clean
+
+clear # für eine saubere Bildschirmanzeige
+
+# 37. Installation abgeschlossen
+log "success" "===== Nextcloud Installation abgeschlossen! ====="
+echo ""
+echo -e "Ihre Nextcloud ist unter folgenden URLs erreichbar:"
+echo -e "Domain: ${GREEN}https://${DOMAIN_NAME}${NC}"
+echo -e "IP-Adresse: ${GREEN}https://${SERVER_IP}${NC}"
+echo -e "\nAdmin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo -e "MariaDB Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+
+echo -e "\n${BLUE}Diese Anmeldedaten wurden in ${CREDENTIALS_FILE} gespeichert.${NC}"
+echo -e "${BLUE}Sie können sie jederzeit mit dem Befehl 'nextcloud-credentials' anzeigen.${NC}"
+echo -e "${BLUE}Für ein Let's Encrypt SSL-Zertifikat, verwenden Sie 'nextcloud-ssl'.${NC}"
+echo -e "${BLUE}Für Systemstatus, verwenden Sie 'nextcloud-status'.${NC}"
+echo -e "${BLUE}Für Updates, verwenden Sie 'nextcloud-update'.${NC}"
+echo -e "${YELLOW}Dokumentation wurde in /root/nextcloud-docs/ erstellt.${NC}"
+
+echo -e "\n${GREEN}Alle Aufgaben abgeschlossen!${NC}"
+echo
+echo -e "\nViel Erfolg mit Ihrer neuen Nextcloud-Installation!"
+PASSWORD=$(generate_password 32)
 NEXTCLOUD_DB_NAME="nextcloud"
 NEXTCLOUD_DB_USER="nextcloud"
 NEXTCLOUD_ADMIN_USER="admin"
