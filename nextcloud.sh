@@ -36,7 +36,7 @@ NEXTCLOUD_DB_PASSWORD=$(openssl rand -base64 32)
 NEXTCLOUD_DB_NAME="nextcloud"
 NEXTCLOUD_DB_USER="nextcloud"
 NEXTCLOUD_ADMIN_USER="admin"
-NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 12)
+NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 24)
 NEXTCLOUD_DATA_DIR="/var/www/nextcloud/data"
 CREDENTIALS_FILE="/root/.nextcloud_credentials"
 SERVER_IP=$(hostname -I | awk '{print $1}')
@@ -53,7 +53,7 @@ clear
 echo -e "${BLUE}=== Nextcloud Installationsscript für Debian 12 ===${NC}"
 echo -e "${BLUE}Dieses Script installiert automatisch Nextcloud mit MariaDB und Redis.${NC}\n"
 echo -e "${GREEN}Installationsparameter:${NC}"
-echo -e "Domain: ${GREEN}$DOMAIN_NAME${NC}"
+# echo -e "Domain: ${GREEN}$DOMAIN_NAME${NC}"
 echo -e "IP-Adresse: ${GREEN}$SERVER_IP${NC}"
 echo -e "Admin Benutzer: ${GREEN}$NEXTCLOUD_ADMIN_USER${NC}"
 echo -e "Datenbank: ${GREEN}$NEXTCLOUD_DB_NAME${NC}\n"
