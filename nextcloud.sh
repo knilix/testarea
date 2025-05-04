@@ -343,6 +343,7 @@ fi
 sudo -u www-data php occ maintenance:repair --include-expensive
 
 ## 3
+sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
 
 # 34. Abschlussmeldung
 clear
