@@ -1,6 +1,9 @@
 #!/bin/bash
 # Nextcloud Fehlerbehandlung Script
 # Dieses Script behandelt häufige Ursachen für "Internal Server Error" in Nextcloud
+#
+# Nicht aktuell - nur zur Info - Only Test!
+#
 
 set -e
 
