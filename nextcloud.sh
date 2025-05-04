@@ -409,24 +409,22 @@ echo " Fertig. PHP-Module aktualisiert und Dienste neu geladen."
 echo
 echo " Nun noch einen Erststart von cron.php."
 
-## 4
-sudo -u www-data php occ maintenance:repair --include-expensive
-
-## 5 Letzter Feinschliff
+## 4 Letzter Feinschliff
 # Zwingen, den Cache zu leeren und den Webserver neu zu starten
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
-sudo -u www-data php /var/www/nextcloud/occ cache:clear
+sudo -u www-data php occ maintenance:repair --include-expensive
 sudo systemctl restart apache2
 
 echo "Warte, bis der Webserver vollständig hochgefahren ist..."
 echo -n "Wartezeit: "
 echo {1..10} | pv -qL 1 > /dev/null
 
-sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
 # Log bereinigen (wird automatisch neu angelegt)
 rm /var/www/nextcloud/data/nextcloud.log
 # cron.php einmalig anschieben
 sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
+
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
 #######################################################################################################################################################################
 
 # 34. Abschlussmeldung
