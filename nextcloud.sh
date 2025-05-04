@@ -437,7 +437,7 @@ curl -s -o /dev/null http://localhost
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
 
 # cron.php einmalig anschieben
-sudo -u www-data php /var/www/nextcloud/cron.php >/dev/null 2>&1
+sudo -u www-data php /var/www/nextcloud/cron.php #>/dev/null 2>&1
 #######################################################################################################################################################################
 
 # 34. Abschlussmeldung
