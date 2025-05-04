@@ -348,6 +348,8 @@ if grep -q "^unixsocketperm 700" /etc/redis/redis.conf; then
 else
   echo -e "${BLUE}Berechtigung 'unixsocketperm' ist bereits korrekt oder nicht 700.${NC}"
 fi
+# Redis neu starten, damit die Änderungen wirksam werden
+systemctl restart redis-server
 
 # 35. Aufräumen
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
