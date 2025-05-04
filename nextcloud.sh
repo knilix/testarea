@@ -325,6 +325,7 @@ EOF
 
 chmod +x /usr/local/bin/nextcloud-credentials
 
+###################################################################################################################################################################
 echo "Füge Nextcloud Konfiguration hinzu"
 
 # Füge die Konfiguration in die config.php ein
@@ -332,28 +333,52 @@ config_file="/var/www/nextcloud/config/config.php"
 
 # Überprüfen, ob die config.php existiert
 if [ -f "$config_file" ]; then
-  # Füge die Konfiguration vor der letzten schließenden Klammer ein
-  sed -i "/^);$/i \ 
-  'default_phone_region' => 'DE', \n
-  'enable_previews' => true, \n
-  'enabledPreviewProviders' => \n
-  array ( \n
-    0 => 'OC\\\\Preview\\\\PNG', \n
-    1 => 'OC\\\\Preview\\\\JPEG', \n
-    2 => 'OC\\\\Preview\\\\GIF', \n
-    3 => 'OC\\\\Preview\\\\BMP', \n
-    4 => 'OC\\\\Preview\\\\XBitmap', \n
-    5 => 'OC\\\\Preview\\\\MP3', \n
-    6 => 'OC\\\\Preview\\\\TXT', \n
-    7 => 'OC\\\\Preview\\\\MarkDown', \n
-    8 => 'OC\\\\Preview\\\\OpenDocument', \n
-    9 => 'OC\\\\Preview\\\\Krita', \n
-    10 => 'OC\\\\Preview\\\\HEIC', \n
-  ), \n
-  'maintenance_window_start' => 1," $config_file
+  echo "Füge Konfiguration in config.php ein"
+  
+  # Die Konfiguration, die eingefügt werden soll
+  new_config="
+  'default_phone_region' => 'DE', 
+  'enable_previews' => true, 
+  'enabledPreviewProviders' => 
+  array ( 
+    0 => 'OC\\\\Preview\\\\PNG', 
+    1 => 'OC\\\\Preview\\\\JPEG', 
+    2 => 'OC\\\\Preview\\\\GIF', 
+    3 => 'OC\\\\Preview\\\\BMP', 
+    4 => 'OC\\\\Preview\\\\XBitmap', 
+    5 => 'OC\\\\Preview\\\\MP3', 
+    6 => 'OC\\\\Preview\\\\TXT', 
+    7 => 'OC\\\\Preview\\\\MarkDown', 
+    8 => 'OC\\\\Preview\\\\OpenDocument', 
+    9 => 'OC\\\\Preview\\\\Krita', 
+    10 => 'OC\\\\Preview\\\\HEIC', 
+  ), 
+  'maintenance_window_start' => 1,"
+  
+  # Konfiguration vor der letzten Klammer einfügen
+  # Wir gehen davon aus, dass die letzte Zeile mit `);` endet
+  sed -i "/^);$/i $new_config" $config_file
 else
   echo "Die Konfigurationsdatei $config_file wurde nicht gefunden!"
 fi
+
+# Hinzufügen des HSTS-Headers in die Apache-Konfiguration
+apache_config_file="/etc/apache2/sites-available/000-default.conf"
+
+# Überprüfen, ob die Apache-Konfigurationsdatei existiert
+if [ -f "$apache_config_file" ]; then
+  echo "Füge Strict-Transport-Security-Header hinzu"
+  echo '  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"' | sudo tee -a $apache_config_file > /dev/null
+else
+  echo "Die Apache-Konfigurationsdatei $apache_config_file wurde nicht gefunden!"
+fi
+
+# Apache neu starten, um die Änderungen zu übernehmen
+echo "Starte Apache neu, um Änderungen zu übernehmen"
+sudo systemctl restart apache2
+
+###################################################################################################################################################################
+
 
 # 33. Überprüfen und Berechtigungen in redis.conf korrigieren, falls nötig
 echo -e "${BLUE}Prüfe unixsocketperm in /etc/redis/redis.conf...${NC}"
