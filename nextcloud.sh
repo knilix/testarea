@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # Maintainer: @knilix
 # Version: 1.0
