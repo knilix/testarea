@@ -436,8 +436,12 @@ curl -s -o /dev/null http://localhost
 
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
 
+clear
+
+echo
+echo "PHP-Cronjob wird einmalig angeschoben"
 # cron.php einmalig anschieben
-# su -s /bin/bash www-data -c "/usr/bin/php /var/www/nextcloud/cron.php" >/dev/null 2>&1
+su -s /bin/bash www-data -c "/usr/bin/php /var/www/nextcloud/cron.php" >/dev/null 2>&1
 #######################################################################################################################################################################
 
 # 34. Abschlussmeldung
