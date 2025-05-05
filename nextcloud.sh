@@ -1,9 +1,9 @@
 #!/bin/bash
-# Maintainer: @knilix (Original), erweitert für Debian, Ubuntu und Alpine
-# Version: 1.1
-# Hinweis: Für Debian 12, Ubuntu ab 22.04+ (x64) und Alpine ab 3.18+ (x64), root erforderlich
+# Maintainer: @knilix (Original), erweitert für Debian und Ubuntu
+# Version: 1.0
+# Hinweis: Für Debian 12 und Ubuntu 22.04+ (x64), root erforderlich
 #
-# Nextcloud Autoinstallation Script für Debian, Ubuntu und Alpine
+# Nextcloud Autoinstallation Script für Debian und Ubuntu
 # Mit MariaDB und Redis Cache
 # ---------------------------------
 
@@ -26,41 +26,29 @@ fi
 
 # 4. Betriebssystem erkennen und prüfen
 if [ ! -f /etc/os-release ]; then
-  echo -e "${RED}Konnte Betriebssystem nicht erkennen. Das Script benötigt Debian 12, Ubuntu 22.04+ oder Alpine 3.18+.${NC}"
+  echo -e "${RED}Konnte Betriebssystem nicht erkennen. Das Script benötigt Debian 12 oder Ubuntu 22.04+.${NC}"
   exit 1
 fi
 
-# OS-Typ ermitteln (Debian, Ubuntu oder Alpine)
-source /etc/os-release
-if [ "$ID" == "ubuntu" ]; then
+# OS-Typ ermitteln (Debian oder Ubuntu)
+if grep -q "Ubuntu" /etc/os-release; then
   OS_TYPE="Ubuntu"
-  OS_VERSION=$VERSION_ID
+  OS_VERSION=$(grep -oP '(?<=VERSION_ID=").*?(?=")' /etc/os-release)
   if (( $(echo "$OS_VERSION < 22.04" | bc -l) )); then
     echo -e "${RED}Dieses Script benötigt Ubuntu 22.04 oder neuer. Erkannte Version: $OS_VERSION${NC}"
     exit 1
   fi
-  PACKAGE_MANAGER="apt"
   echo -e "${BLUE}Ubuntu $OS_VERSION erkannt. Fahre fort...${NC}"
-elif [ "$ID" == "debian" ]; then
+elif grep -q "Debian" /etc/os-release; then
   OS_TYPE="Debian"
-  OS_VERSION=$VERSION_ID
+  OS_VERSION=$(grep -oP '(?<=VERSION_ID=").*?(?=")' /etc/os-release)
   if (( $(echo "$OS_VERSION < 12" | bc -l) )); then
     echo -e "${RED}Dieses Script benötigt Debian 12 oder neuer. Erkannte Version: $OS_VERSION${NC}"
     exit 1
   fi
-  PACKAGE_MANAGER="apt"
   echo -e "${BLUE}Debian $OS_VERSION erkannt. Fahre fort...${NC}"
-elif [ "$ID" == "alpine" ]; then
-  OS_TYPE="Alpine"
-  OS_VERSION=$VERSION_ID
-  if (( $(echo "$OS_VERSION < 3.18" | bc -l) )); then
-    echo -e "${RED}Dieses Script benötigt Alpine 3.18 oder neuer. Erkannte Version: $OS_VERSION${NC}"
-    exit 1
-  fi
-  PACKAGE_MANAGER="apk"
-  echo -e "${BLUE}Alpine $OS_VERSION erkannt. Fahre fort...${NC}"
 else
-  echo -e "${RED}Dieses Script unterstützt nur Debian, Ubuntu oder Alpine. Erkanntes System: $ID${NC}"
+  echo -e "${RED}Dieses Script unterstützt nur Debian oder Ubuntu. Erkanntes System: $(grep -oP '(?<=^ID=).+' /etc/os-release)${NC}"
   exit 1
 fi
 
@@ -101,136 +89,39 @@ fi
 
 # 9. System aktualisieren
 echo -e "${BLUE}[1/10] System wird aktualisiert...${NC}"
-if [ "$PACKAGE_MANAGER" == "apt" ]; then
-  apt update && apt upgrade -y
-elif [ "$PACKAGE_MANAGER" == "apk" ]; then
-  apk update && apk upgrade
-fi
+apt update && apt upgrade -y
 
 # 10. Benötigte Pakete installieren
 echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
+# Ensure bc is installed (needed for version comparison)
+apt install -y bc
 
-if [ "$PACKAGE_MANAGER" == "apt" ]; then
-  # Ensure bc is installed (needed for version comparison)
-  apt install -y bc
-
-  # Install other requirements
-  apt install -y apache2 mariadb-server redis-server \
-    php php-cli php-common php-fpm php-json php-intl php-imagick \
-    php-curl php-mbstring php-zip php-xml php-gd php-mysql \
-    php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra
-elif [ "$PACKAGE_MANAGER" == "apk" ]; then
-  # Alpine verwendet BusyBox, welches bc enthält
-  # Falls nicht, installieren wir es explizit
-  if ! command -v bc &> /dev/null; then
-    apk add bc
-  fi
-
-  # Installiere Apache, MariaDB, Redis und PHP
-  apk add apache2 mariadb mariadb-client redis \
-    php php-fpm php-json php-intl php-gd \
-    php-curl php-mbstring php-zip php-xml php-mysqli \
-    php-bz2 php-redis php-apcu php-pecl-imagick \
-    unzip curl wget openssl pv
-  
-  # Überprüfe, ob wir zusätzliche Pakete für ImageMagick SVG-Support benötigen
-  apk add imagemagick
-  
-  # Alpine verwendet nicht systemd, daher starten wir die Dienste direkt
-  rc-update add apache2 default
-  rc-update add mariadb default
-  rc-update add redis default
-  rc-update add php-fpm8 default || rc-update add php-fpm default
-  
-  # Starte die Services
-  rc-service mariadb setup
-  rc-service mariadb start
-  rc-service redis start
-  rc-service php-fpm8 start || rc-service php-fpm start
-fi
+# Install other requirements
+apt install -y apache2 mariadb-server redis-server \
+  php php-cli php-common php-fpm php-json php-intl php-imagick \
+  php-curl php-mbstring php-zip php-xml php-gd php-mysql \
+  php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra
 
 # 11. Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
+a2enmod rewrite headers env dir mime ssl
 
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Für Alpine Linux
-  # Aktiviere benötigte Module
-  sed -i 's/#LoadModule rewrite_module/LoadModule rewrite_module/' /etc/apache2/httpd.conf
-  sed -i 's/#LoadModule headers_module/LoadModule headers_module/' /etc/apache2/httpd.conf
-  sed -i 's/#LoadModule env_module/LoadModule env_module/' /etc/apache2/httpd.conf
-  sed -i 's/#LoadModule dir_module/LoadModule dir_module/' /etc/apache2/httpd.conf
-  sed -i 's/#LoadModule mime_module/LoadModule mime_module/' /etc/apache2/httpd.conf
-  sed -i 's/#LoadModule ssl_module/LoadModule ssl_module/' /etc/apache2/httpd.conf
-  
-  # Stelle sicher, dass das PHP-Modul geladen wird
-  if [ ! -f /etc/apache2/conf.d/php-fpm.conf ]; then
-    cat > /etc/apache2/conf.d/php-fpm.conf << EOF
-<FilesMatch \.php$>
-    SetHandler "proxy:unix:/run/php-fpm/www.sock|fcgi://localhost"
-</FilesMatch>
-EOF
-  fi
-  
-  # Aktiviere zusätzliche Module
-  echo "LoadModule proxy_module modules/mod_proxy.so" >> /etc/apache2/httpd.conf
-  echo "LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so" >> /etc/apache2/httpd.conf
-  
-  # Starte Apache neu
-  rc-service apache2 restart
+# Detect PHP version
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+if [ -f "/etc/apache2/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
+  a2enconf "php${PHP_VERSION}-fpm"
 else
-  # Für Debian/Ubuntu
-  a2enmod rewrite headers env dir mime ssl
-  
-  # Detect PHP version
-  PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
-  if [ -f "/etc/apache2/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
-    a2enconf "php${PHP_VERSION}-fpm"
-  else
-    a2enmod proxy_fcgi setenvif
-    a2enconf php${PHP_VERSION}-fpm
-  fi
-  
-  systemctl restart apache2
+  a2enmod proxy_fcgi setenvif
+  a2enconf php${PHP_VERSION}-fpm
 fi
+
+systemctl restart apache2
 
 # 13. MariaDB konfigurieren
 echo -e "${BLUE}[4/10] MariaDB wird konfiguriert...${NC}"
 
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Alpine-spezifische MariaDB-Konfiguration
-  mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"
-  mysql -e "DELETE FROM mysql.user WHERE User='';"
-  mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
-  mysql -e "DROP DATABASE IF EXISTS test;"
-  mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
-  
-  DB_EXISTS=$(mysql -e "SHOW DATABASES LIKE '${NEXTCLOUD_DB_NAME}';" | grep -o "${NEXTCLOUD_DB_NAME}" || echo "")
-  if [ -z "$DB_EXISTS" ]; then
-    mysql -e "CREATE DATABASE ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
-  fi
-  
-  USER_EXISTS=$(mysql -e "SELECT User FROM mysql.user WHERE User='${NEXTCLOUD_DB_USER}';" | grep -o "${NEXTCLOUD_DB_USER}" || echo "")
-  if [ -z "$USER_EXISTS" ]; then
-    mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
-  fi
-  mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
-  mysql -e "FLUSH PRIVILEGES;"
-  
-  # MariaDB-Konfigurationsdatei erstellen
-  mkdir -p /etc/my.cnf.d/
-  cat > /etc/my.cnf.d/99-nextcloud.cnf << EOF
-[mysqld]
-transaction_isolation = READ-COMMITTED
-binlog_format = ROW
-innodb_large_prefix=on
-innodb_file_per_table=1
-max_allowed_packet = 128M
-EOF
-
-  # Neustart von MariaDB, um Änderungen anzuwenden
-  rc-service mariadb restart
-
-elif [ "$OS_TYPE" == "Debian" ]; then
+# Systemspezifische MariaDB-Konfiguration
+if [ "$OS_TYPE" = "Debian" ]; then
   # Debian-spezifische Konfiguration
   mysql -e "SET PASSWORD FOR root@localhost = PASSWORD('${MYSQL_ROOT_PASSWORD}');"
   mysql -e "DELETE FROM mysql.user WHERE User='';"
@@ -279,23 +170,22 @@ else
   mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;"
 fi
 
-# MariaDB-Konfigurationspfad für Debian/Ubuntu prüfen und erstellen falls nötig
-if [ "$OS_TYPE" != "Alpine" ]; then
-  if [ ! -d "/etc/mysql/mariadb.conf.d" ]; then
-    # Bei Ubuntu könnte es auch unter /etc/mysql/conf.d sein
-    if [ -d "/etc/mysql/conf.d" ]; then
-      MARIADB_CONF_DIR="/etc/mysql/conf.d"
-    else
-      # Erstelle das Verzeichnis, falls es nicht existiert
-      mkdir -p "/etc/mysql/mariadb.conf.d"
-      MARIADB_CONF_DIR="/etc/mysql/mariadb.conf.d"
-    fi
+# MariaDB-Konfigurationspfad prüfen und erstellen falls nötig
+if [ ! -d "/etc/mysql/mariadb.conf.d" ]; then
+  # Bei Ubuntu könnte es auch unter /etc/mysql/conf.d sein
+  if [ -d "/etc/mysql/conf.d" ]; then
+    MARIADB_CONF_DIR="/etc/mysql/conf.d"
   else
+    # Erstelle das Verzeichnis, falls es nicht existiert
+    mkdir -p "/etc/mysql/mariadb.conf.d"
     MARIADB_CONF_DIR="/etc/mysql/mariadb.conf.d"
   fi
+else
+  MARIADB_CONF_DIR="/etc/mysql/mariadb.conf.d"
+fi
 
-  # MariaDB-Konfiguration für Nextcloud
-  cat > "${MARIADB_CONF_DIR}/99-nextcloud.cnf" << EOF
+# MariaDB-Konfiguration für Nextcloud
+cat > "${MARIADB_CONF_DIR}/99-nextcloud.cnf" << EOF
 [mysqld]
 transaction_isolation = READ-COMMITTED
 binlog_format = ROW
@@ -305,101 +195,48 @@ innodb_file_per_table=1
 max_allowed_packet = 128M
 EOF
 
-  # Neustart von MariaDB, um Änderungen anzuwenden
-  if systemctl list-units --type=service | grep -q "mariadb.service"; then
-    systemctl restart mariadb
-  else
-    systemctl restart mysql  # Fallback für manche Ubuntu-Versionen
-  fi
+# Neustart von MariaDB, um Änderungen anzuwenden
+if systemctl list-units --type=service | grep -q "mariadb.service"; then
+  systemctl restart mariadb
+else
+  systemctl restart mysql  # Fallback für manche Ubuntu-Versionen
 fi
 
 # 17. Redis konfigurieren
 echo -e "${BLUE}[5/10] Redis wird konfiguriert...${NC}"
 
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Redis-Konfiguration für Alpine
-  REDIS_CONF="/etc/redis.conf"
-  
-  sed -i "s/port 6379/port 0/" $REDIS_CONF
-  sed -i "s/# unixsocket/unixsocket/" $REDIS_CONF
-  sed -i "s/# unixsocketperm 700/unixsocketperm 770/" $REDIS_CONF
-  
-  # Web-Server-Benutzer zu Redis-Gruppe hinzufügen
-  addgroup www-data redis
-  
-  # Redis neu starten
-  rc-service redis restart
+# Pfad der Redis-Konfiguration überprüfen
+if [ -f "/etc/redis/redis.conf" ]; then
+  REDIS_CONF="/etc/redis/redis.conf"
+elif [ -f "/etc/redis/redis-server.conf" ]; then  # Einige Ubuntu-Versionen verwenden diesen Pfad
+  REDIS_CONF="/etc/redis/redis-server.conf"
 else
-  # Pfad der Redis-Konfiguration überprüfen für Debian/Ubuntu
-  if [ -f "/etc/redis/redis.conf" ]; then
-    REDIS_CONF="/etc/redis/redis.conf"
-  elif [ -f "/etc/redis/redis-server.conf" ]; then  # Einige Ubuntu-Versionen verwenden diesen Pfad
-    REDIS_CONF="/etc/redis/redis-server.conf"
-  else
-    echo -e "${RED}Redis-Konfigurationsdatei nicht gefunden.${NC}"
-    exit 1
-  fi
+  echo -e "${RED}Redis-Konfigurationsdatei nicht gefunden.${NC}"
+  exit 1
+fi
 
-  # Redis konfigurieren
-  sed -i "s/port 6379/port 0/" $REDIS_CONF
-  sed -i "s/# unixsocket/unixsocket/" $REDIS_CONF
-  sed -i "s/# unixsocketperm 700/unixsocketperm 770/" $REDIS_CONF
-  usermod -a -G redis www-data
+# Redis konfigurieren
+sed -i "s/port 6379/port 0/" $REDIS_CONF
+sed -i "s/# unixsocket/unixsocket/" $REDIS_CONF
+sed -i "s/# unixsocketperm 700/unixsocketperm 770/" $REDIS_CONF
+usermod -a -G redis www-data
 
-  # Redis-Servicename überprüfen und neustarten
-  if systemctl list-units --type=service | grep -q "redis-server.service"; then
-    systemctl restart redis-server
-  elif systemctl list-units --type=service | grep -q "redis.service"; then
-    systemctl restart redis
-  else
-    echo -e "${RED}Redis-Service nicht gefunden.${NC}"
-    exit 1
-  fi
+# Redis-Servicename überprüfen und neustarten
+if systemctl list-units --type=service | grep -q "redis-server.service"; then
+  systemctl restart redis-server
+elif systemctl list-units --type=service | grep -q "redis.service"; then
+  systemctl restart redis
+else
+  echo -e "${RED}Redis-Service nicht gefunden.${NC}"
+  exit 1
 fi
 
 # [6/10] PHP für Nextcloud optimieren
 echo -e "${BLUE}[6/10] PHP-Konfiguration für Nextcloud optimieren...${NC}"
-
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Finde heraus, welche PHP-Version verwendet wird
-  if [ -d "/etc/php8" ]; then
-    PHP_BASE_DIR="/etc/php8"
-  elif [ -d "/etc/php7" ]; then
-    PHP_BASE_DIR="/etc/php7"
-  else
-    PHP_BASE_DIR="/etc/php"
-  fi
-  
-  # Für alle verfügbaren PHP-SAPIs konfigurieren
-  for sapi in fpm cli apache2; do
-    if [ -d "$PHP_BASE_DIR/$sapi/conf.d" ]; then
-      echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
-      cat > $PHP_BASE_DIR/$sapi/conf.d/99-nextcloud.ini << EOF
-memory_limit = 512M
-upload_max_filesize = 500M
-post_max_size = 500M
-max_execution_time = 300
-date.timezone = Europe/Berlin
-
-opcache.enable=1
-opcache.interned_strings_buffer=32
-opcache.max_accelerated_files=10000
-opcache.memory_consumption=128
-opcache.save_comments=1
-opcache.revalidate_freq=1
-EOF
-    fi
-  done
-  
-  # PHP-FPM neustarten
-  rc-service php-fpm8 restart || rc-service php-fpm restart
-else
-  # Für Debian/Ubuntu
-  PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
-  for sapi in fpm cli apache2; do
+for sapi in fpm cli apache2; do
     if [ -d "/etc/php/${PHP_VERSION}/$sapi/conf.d" ]; then
-      echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
-      cat > /etc/php/${PHP_VERSION}/$sapi/conf.d/99-nextcloud.ini << EOF
+        echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
+        cat > /etc/php/${PHP_VERSION}/$sapi/conf.d/99-nextcloud.ini << EOF
 memory_limit = 512M
 upload_max_filesize = 500M
 post_max_size = 500M
@@ -414,13 +251,12 @@ opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
     fi
-  done
+done
 
-  # PHP-FPM neustarten (wichtig für Änderungen)
-  if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm"; then
+# PHP-FPM neustarten (wichtig für Änderungen)
+if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm"; then
     echo -e "${BLUE}→ PHP-FPM wird neu gestartet...${NC}"
     systemctl restart php${PHP_VERSION}-fpm
-  fi
 fi
 
 # 20. Apache Virtual Host konfigurieren
@@ -431,52 +267,7 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -out /etc/ssl/nextcloud/nextcloud.crt \
   -subj "/CN=${DOMAIN_NAME}/O=Nextcloud/C=DE"
 
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Für Alpine Linux
-  # Stellen Sie sicher, dass das SSL-Modul in der Apache-Konfiguration aktiviert ist
-  if ! grep -q "LoadModule ssl_module" /etc/apache2/httpd.conf; then
-    echo "LoadModule ssl_module modules/mod_ssl.so" >> /etc/apache2/httpd.conf
-  fi
-  
-  # Virtual Host für HTTP und HTTPS konfigurieren
-  cat > /etc/apache2/conf.d/nextcloud.conf << EOF
-<VirtualHost *:80>
-    ServerName ${DOMAIN_NAME}
-    Redirect permanent / https://${DOMAIN_NAME}/
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName ${DOMAIN_NAME}
-    DocumentRoot /var/www/nextcloud
-    SSLEngine on
-    SSLCertificateFile /etc/ssl/nextcloud/nextcloud.crt
-    SSLCertificateKeyFile /etc/ssl/nextcloud/nextcloud.key
-
-    <IfModule mod_headers.c>
-        Header always set Strict-Transport-Security "max-age=15552000; includeSubDomains"
-    </IfModule>
-
-    <Directory /var/www/nextcloud>
-        Options +FollowSymlinks
-        AllowOverride All
-        Require all granted
-        <IfModule mod_dav.c>
-            Dav off
-        </IfModule>
-        SetEnv HOME /var/www/nextcloud
-        SetEnv HTTP_HOME /var/www/nextcloud
-    </Directory>
-
-    ErrorLog /var/log/apache2/nextcloud_error.log
-    CustomLog /var/log/apache2/nextcloud_access.log combined
-</VirtualHost>
-EOF
-
-  # Apache neu starten
-  rc-service apache2 restart
-else
-  # Für Debian/Ubuntu
-  cat > /etc/apache2/sites-available/nextcloud.conf << EOF
+cat > /etc/apache2/sites-available/nextcloud.conf << EOF
 <VirtualHost *:80>
     ServerName ${DOMAIN_NAME}
     Redirect permanent / https://${DOMAIN_NAME}/
@@ -509,10 +300,9 @@ else
 </VirtualHost>
 EOF
 
-  a2enmod headers ssl
-  a2ensite nextcloud.conf
-  systemctl reload apache2
-fi
+a2enmod headers ssl
+a2ensite nextcloud.conf
+systemctl reload apache2
 
 # 24. Nextcloud installieren
 echo -e "${BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...${NC}"
@@ -547,29 +337,9 @@ sudo -u www-data php occ config:system:set overwriteprotocol --value="https"
 sudo -u www-data php occ config:system:set htaccess.RewriteBase --value="/"
 sudo -u www-data php occ maintenance:update:htaccess
 
-# Alpine-spezifischer Fix für Redis-Socket-Pfad
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Überprüfen des tatsächlichen Redis-Socket-Pfads
-  ACTUAL_REDIS_SOCKET=$(find /var/run -name "redis*.sock" | head -n 1)
-  if [ -n "$ACTUAL_REDIS_SOCKET" ]; then
-    sudo -u www-data php occ config:system:set redis host --value="$ACTUAL_REDIS_SOCKET"
-  fi
-fi
-
 # 30. Cronjob
-if [ "$OS_TYPE" == "Alpine" ]; then
-  # Für Alpine Linux - Verwende /etc/crontabs/root
-  echo "*/5 * * * * cd /var/www/nextcloud && php -f cron.php" >> /etc/crontabs/root
-  sudo -u www-data php occ background:cron
-  
-  # Cron-Dienst aktivieren
-  rc-update add crond default || rc-update add cron default
-  rc-service crond start || rc-service cron start
-else
-  # Für Debian/Ubuntu
-  echo "*/5 * * * * www-data php -f /var/www/nextcloud/cron.php" > /etc/cron.d/nextcloud
-  sudo -u www-data php occ background:cron
-fi
+echo "*/5 * * * * www-data php -f /var/www/nextcloud/cron.php" > /etc/cron.d/nextcloud
+sudo -u www-data php occ background:cron
 
 # 31. Zugangsdaten speichern
 cat > "${CREDENTIALS_FILE}" << EOF
@@ -582,6 +352,223 @@ NEXTCLOUD_DB_NAME=${NEXTCLOUD_DB_NAME}
 NEXTCLOUD_DB_USER=${NEXTCLOUD_DB_USER}
 NEXTCLOUD_DB_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
 INSTALLATION_DATE=$(date +"%Y-%m-%d %H:%M:%S")
-OS_TYPE=${OS_TYPE}
 EOF
-chmod 600 "${
+chmod 600 "${CREDENTIALS_FILE}"
+
+# 32. Anmeldedaten anzeigen Befehl
+cat > /usr/local/bin/nextcloud-credentials << 'EOF'
+#!/bin/bash
+if [ "$EUID" -ne 0 ]; then
+  echo "Bitte als root ausführen (sudo nextcloud-credentials)"
+  exit 1
+fi
+
+CRED_FILE="/root/.nextcloud_credentials"
+if [ ! -f "$CRED_FILE" ]; then
+  echo "Keine Nextcloud-Anmeldedaten gefunden!"
+  exit 1
+fi
+
+source "$CRED_FILE"
+
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
+echo -e "Nextcloud URL (Domain): ${GREEN}${NEXTCLOUD_URL_DOMAIN}${NC}"
+echo -e "Nextcloud URL (IP): ${GREEN}${NEXTCLOUD_URL_IP}${NC}"
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo -e "\n${BLUE}MariaDB Datenbank:${NC}"
+echo -e "Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+echo -e "Datenbank: ${GREEN}${NEXTCLOUD_DB_NAME}${NC}"
+echo -e "DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}" 
+echo -e "DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
+echo -e "\nInstalliert am: ${GREEN}${INSTALLATION_DATE}${NC}"
+EOF
+chmod +x /usr/local/bin/nextcloud-credentials
+
+# 33. Redis Socket-Perm prüfen
+# Redis-Konfigurationspfad bestimmen
+if [ -f "/etc/redis/redis.conf" ]; then
+  REDIS_CONF="/etc/redis/redis.conf"
+elif [ -f "/etc/redis/redis-server.conf" ]; then
+  REDIS_CONF="/etc/redis/redis-server.conf"
+fi
+
+if [ -n "$REDIS_CONF" ] && grep -q "^unixsocketperm 700" "$REDIS_CONF"; then
+  sed -i "s/^unixsocketperm 700/unixsocketperm 770/" "$REDIS_CONF"
+  
+  # Redis-Service neu starten
+  if systemctl list-units --type=service | grep -q "redis-server.service"; then
+    systemctl restart redis-server
+  elif systemctl list-units --type=service | grep -q "redis.service"; then
+    systemctl restart redis
+  fi
+fi
+
+#######################################################################################################################################################################
+# Zusatz, in letzter Minute hinzugefügt
+## 1
+echo "Füge Nextcloud Konfiguration hinzu"
+
+config_file="/var/www/nextcloud/config/config.php"
+
+if [ -f "$config_file" ]; then
+  echo "Füge Konfiguration in config.php ein"
+
+  # Temporäre Datei erzeugen
+  tmp_file=$(mktemp)
+
+  # Konfiguration vor der letzten Klammer einfügen
+  awk '
+    /^\);$/ {
+      print "  '\''default_phone_region'\'' => '\''DE'\'',";
+      print "  '\''enable_previews'\'' => true,";
+      print "  '\''enabledPreviewProviders'\'' => array (";
+      print "    0 => '\''OC\\\\\\\\Preview\\\\\\\\PNG'\'',";
+      print "    1 => '\''OC\\\\\\\\Preview\\\\\\\\JPEG'\'',";
+      print "    2 => '\''OC\\\\\\\\Preview\\\\\\\\GIF'\'',";
+      print "    3 => '\''OC\\\\\\\\Preview\\\\\\\\BMP'\'',";
+      print "    4 => '\''OC\\\\\\\\Preview\\\\\\\\XBitmap'\'',";
+      print "    5 => '\''OC\\\\\\\\Preview\\\\\\\\MP3'\'',";
+      print "    6 => '\''OC\\\\\\\\Preview\\\\\\\\TXT'\'',";
+      print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
+      print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
+      print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
+      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
+      print "  ),";
+      print "  '\''maintenance_window_start'\'' => 1,";
+    }
+    { print }
+  ' "$config_file" > "$tmp_file"
+
+  # Backup und Überschreiben
+  cp "$config_file" "${config_file}.bak"
+  cp "$tmp_file" "$config_file"
+  rm "$tmp_file"
+
+  echo "Konfiguration erfolgreich eingefügt in $config_file"
+else
+  echo "Die Konfigurationsdatei $config_file wurde nicht gefunden!"
+fi
+
+##3 Nachtrag PHP-Module für Nextcloud
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+
+has_php_module() {
+  php -m | grep -iq "^$1\$"
+}
+
+has_imagick_svg_support() {
+  php -r "if (extension_loaded('imagick')) { \$v = new Imagick(); echo in_array('SVG', \$v->queryFormats()) ? 'yes' : 'no'; } else { echo 'no'; }"
+}
+
+install_gmp=false
+install_svg_support=false
+install_imagick=false
+
+if has_php_module "gmp"; then
+  echo " php-gmp ist bereits installiert."
+else
+  echo " php-gmp fehlt."
+  install_gmp=true
+fi
+
+if has_php_module "imagick"; then
+  echo " php-imagick ist installiert."
+  if [ "$(has_imagick_svg_support)" == "yes" ]; then
+    echo " imagick unterstützt SVG."
+  else
+    echo " imagick hat keine SVG-Unterstützung."
+    install_svg_support=true
+  fi
+else
+  echo " php-imagick fehlt."
+  install_imagick=true
+  install_svg_support=true
+fi
+
+# echo " Installiere erforderliche Pakete ..."
+apt-get update -qq
+
+if $install_gmp; then
+  apt-get install -y "php${PHP_VERSION}-gmp"
+fi
+
+if $install_imagick; then
+  apt-get install -y "php${PHP_VERSION}-imagick"
+fi
+
+if $install_svg_support; then
+  apt-get install -y libmagickcore-6.q16-6-extra
+fi
+
+echo " Dienste neu starten (falls vorhanden) ..."
+
+if systemctl list-units --type=service | grep -q "apache2.service"; then
+  echo " Starte Apache neu ..."
+  systemctl reload apache2
+fi
+
+if systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm.service"; then
+  echo " Starte PHP-FPM neu ..."
+  systemctl restart "php${PHP_VERSION}-fpm"
+fi
+
+echo " Fertig. PHP-Module aktualisiert und Dienste neu geladen."
+echo
+echo " Nun noch einen Erststart von cron.php."
+
+## 4 Letzter Feinschliff
+# Zwingen, den Cache zu leeren und den Webserver neu zu starten
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
+sudo -u www-data php occ maintenance:repair --include-expensive
+sudo systemctl restart apache2
+
+# Fortschrittsbalken für die Wartezeit
+echo "Warte, bis der Webserver vollständig hochgefahren ist..."
+
+# Manuelle Schleife für den Fortschrittsbalken
+# Anzahl der Schritte (dauert insgesamt 10 Sekunden)
+TOTAL_STEPS=10
+for i in $(seq 1 $TOTAL_STEPS); do
+    echo -n "#"
+    sleep 1
+done
+
+echo # Um die Zeile zu beenden
+
+# Log bereinigen (wird automatisch neu angelegt)
+rm -f /var/www/nextcloud/data/nextcloud.log
+
+# Zusätzliche Anfrage an den Server senden, um die Sitzung zu initialisieren
+curl -s -o /dev/null http://localhost || true
+
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
+#######################################################################################################################################################################
+
+# Bereinigen
+echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
+
+# 34. Abschlussmeldung
+clear
+echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
+# echo -e "Nextcloud URL (Domain): ${GREEN}${NEXTCLOUD_URL_DOMAIN}${NC}"
+echo -e "\n${BLUE}Zugangsdaten:${NC}"
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+# echo -e "\n${BLUE}MariaDB Datenbank:${NC}"
+# echo -e "Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+# echo -e "Datenbank: ${GREEN}${NEXTCLOUD_DB_NAME}${NC}"
+# echo -e "DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}" 
+# echo -e "DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
+echo
+echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====${NC}"
+echo -e "Anmeldung unter folgendem Link:\n"
+# echo -e "Domain: ${BLUE}https://${DOMAIN_NAME}${NC}"
+echo -e "IP:     ${BLUE}https://${SERVER_IP}${NC}"
+echo -e "\nBenutzen Sie den Befehl ${GREEN}nextcloud-credentials${NC}, um Ihre kompletten Zugangsdaten anzuzeigen."
+echo
