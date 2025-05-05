@@ -4,7 +4,7 @@
 # Hinweis: Für Debian 12, Ubuntu ab 22.04+ (x64) und Alpine ab 3.18+ (x64), root erforderlich
 #
 # Nextcloud Autoinstallation Script für Debian, Ubuntu und Alpine
-# Mit MariaDB und Redis Cache
+# Mit MariaDB und Redis Cache 
 # ---------------------------------
 
 # 1. Fehler-Handling
