@@ -126,6 +126,11 @@ elif [ "$PACKAGE_MANAGER" == "apk" ]; then
     apk add bc
   fi
 
+# Alpine verwendet BusyBox, welches bc enthält
+# Falls nicht, installieren wir es explizit
+if ! command -v bc &> /dev/null; then
+  apk add bc
+fi
   # Installiere Apache, MariaDB, Redis und PHP
   apk add apache2 mariadb mariadb-client redis \
     php php-fpm php-json php-intl php-gd \
@@ -136,17 +141,17 @@ elif [ "$PACKAGE_MANAGER" == "apk" ]; then
   # Überprüfe, ob wir zusätzliche Pakete für ImageMagick SVG-Support benötigen
   apk add imagemagick
   
-  # Alpine verwendet nicht systemd, daher starten wir die Dienste direkt
-  rc-update add apache2 default
-  rc-update add mariadb default
-  rc-update add redis default
-  rc-update add php-fpm8 default || rc-update add php-fpm default
+# Alpine verwendet nicht systemd, daher starten wir die Dienste direkt
+rc-update add apache2 default
+rc-update add mariadb default
+rc-update add redis default
+rc-update add php-fpm default
   
-  # Starte die Services
-  rc-service mariadb setup
-  rc-service mariadb start
-  rc-service redis start
-  rc-service php-fpm8 start || rc-service php-fpm start
+# Starte die Services
+rc-service mariadb setup
+rc-service mariadb start
+rc-service redis start
+rc-service php-fpm start
 fi
 
 # 11. Apache für PHP konfigurieren
@@ -392,7 +397,7 @@ EOF
   done
   
   # PHP-FPM neustarten
-  rc-service php-fpm8 restart || rc-service php-fpm restart
+  rc-service php-fpm restart
 else
   # Für Debian/Ubuntu
   PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
@@ -717,7 +722,7 @@ echo -e "${BLUE}Dienste werden neu gestartet...${NC}"
 
 # Auf Alpine verwenden wir OpenRC
 rc-service nginx restart 2>/dev/null || rc-service apache2 restart 2>/dev/null
-rc-service php-fpm${PHP_VERSION} restart 2>/dev/null
+rc-service php-fpm restart 2>/dev/null
 
 # 37. Nextcloud in Wartungsmodus schalten und reparieren
 echo -e "${BLUE}Wartungsreparatur wird durchgeführt...${NC}"
