@@ -142,10 +142,51 @@ fi
   apk add imagemagick
   
 # Alpine verwendet nicht systemd, daher starten wir die Dienste direkt
-rc-update add apache2 default
-rc-update add mariadb default
-rc-update add redis default
-rc-update add php-fpm default
+  rc-update add apache2 default
+  rc-update add mariadb default
+  rc-update add redis default
+  
+  # Finde den korrekten PHP-FPM Service-Namen
+  PHP_FPM_SERVICE=""
+  if rc-service -l | grep -q "php-fpm"; then
+    PHP_FPM_SERVICE="php-fpm"
+  elif rc-service -l | grep -q "php-fpm8"; then
+    PHP_FPM_SERVICE="php-fpm8"
+  elif rc-service -l | grep -q "php8-fpm"; then
+    PHP_FPM_SERVICE="php8-fpm"
+  elif rc-service -l | grep -q "php7-fpm"; then
+    PHP_FPM_SERVICE="php7-fpm"
+  fi
+  
+  if [ -n "$PHP_FPM_SERVICE" ]; then
+    rc-update add $PHP_FPM_SERVICE default
+  else
+    echo "${RED}Konnte PHP-FPM Service nicht finden. Sie müssen ihn manuell konfigurieren.${NC}"
+  fi
+
+
+
+  # Starte PHP-FPM Service mit dem vorher bestimmten Namen
+  if [ -n "$PHP_FPM_SERVICE" ]; then
+    rc-service $PHP_FPM_SERVICE start
+  fi
+
+
+  # Starte PHP-FPM Service mit dem vorher bestimmten Namen
+  if [ -n "$PHP_FPM_SERVICE" ]; then
+    rc-service $PHP_FPM_SERVICE start
+  fi
+
+  # PHP-FPM neustarten
+  if [ -n "$PHP_FPM_SERVICE" ]; then
+    rc-service $PHP_FPM_SERVICE restart
+  fi
+
+
+  # PHP-FPM neustarten
+  if [ -n "$PHP_FPM_SERVICE" ]; then
+    rc-service $PHP_FPM_SERVICE restart
+  fi
   
 # Starte die Services
 rc-service mariadb setup
