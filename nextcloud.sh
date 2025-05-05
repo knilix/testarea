@@ -132,10 +132,13 @@ if ! command -v bc &> /dev/null; then
   apk add bc
 fi
   # Installiere Apache, MariaDB, Redis und PHP
+PHP_VERSION=$(php -r 'echo PHP_MAJOR_VERSION;')
+  
+  # Installiere PHP-FPM mit korrektem Paketnamen
   apk add apache2 mariadb mariadb-client redis \
-    php php-fpm php-json php-intl php-gd \
-    php-curl php-mbstring php-zip php-xml php-mysqli \
-    php-bz2 php-redis php-apcu php-pecl-imagick \
+    php${PHP_VERSION} php${PHP_VERSION}-fpm php${PHP_VERSION}-json php${PHP_VERSION}-intl php${PHP_VERSION}-gd \
+    php${PHP_VERSION}-curl php${PHP_VERSION}-mbstring php${PHP_VERSION}-zip php${PHP_VERSION}-xml php${PHP_VERSION}-mysqli \
+    php${PHP_VERSION}-bz2 php${PHP_VERSION}-redis php${PHP_VERSION}-apcu php${PHP_VERSION}-pecl-imagick \
     unzip curl wget openssl pv
   
   # Überprüfe, ob wir zusätzliche Pakete für ImageMagick SVG-Support benötigen
@@ -146,6 +149,33 @@ fi
   rc-update add mariadb default
   rc-update add redis default
   
+  # Finde den PHP-FPM Service basierend auf der PHP-Version
+  if [ -f /etc/init.d/php${PHP_VERSION}-fpm ]; then
+    PHP_FPM_SERVICE="php${PHP_VERSION}-fpm"
+  elif [ -f /etc/init.d/php-fpm${PHP_VERSION} ]; then
+    PHP_FPM_SERVICE="php-fpm${PHP_VERSION}"
+  else
+    # Versuche herauszufinden, welche PHP-FPM-Services verfügbar sind
+    echo "Verfügbare PHP-Services:"
+    ls -l /etc/init.d/php*
+    
+    # Standard Service-Namen für verschiedene Versionen probieren
+    for svc in php-fpm php7-fpm php8-fpm php81-fpm php82-fpm php83-fpm; do
+      if [ -f "/etc/init.d/$svc" ]; then
+        PHP_FPM_SERVICE="$svc"
+        break
+      fi
+    done
+  fi
+  
+  if [ -n "$PHP_FPM_SERVICE" ]; then
+    echo "Verwende PHP-FPM Service: $PHP_FPM_SERVICE"
+    rc-update add $PHP_FPM_SERVICE default
+  else
+    echo "${RED}Konnte PHP-FPM Service nicht finden. Installation wird abgebrochen.${NC}"
+    exit 1
+  fi
+
   # Finde den korrekten PHP-FPM Service-Namen
   PHP_FPM_SERVICE=""
   if rc-service -l | grep -q "php-fpm"; then
@@ -438,7 +468,8 @@ EOF
   done
   
   # PHP-FPM neustarten
-  rc-service php-fpm restart
+  rc-service $PHP_FPM_SERVICE start
+
 else
   # Für Debian/Ubuntu
   PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
