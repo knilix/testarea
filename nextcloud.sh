@@ -1,7 +1,7 @@
 #!/bin/bash
 # Maintainer: @knilix (Original), erweitert für Debian und Ubuntu
-# Version: 1.0
-# Hinweis: Für Debian 12 und Ubuntu ab 22.04+ (x64), root erforderlich
+# Version: 1.1
+# Hinweis: Für Debian 12 und Ubuntu 22.04+ (x64), root erforderlich
 
 # Fehler-Handling und Farbdefinitionen
 set -e
@@ -63,6 +63,14 @@ echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
 apt install -y bc apache2 mariadb-server redis-server php php-cli php-common php-fpm php-json \
   php-intl php-imagick php-curl php-mbstring php-zip php-xml php-gd php-mysql php-bz2 \
   php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra
+
+# APCu für PHP aktivieren (wichtig für Nextcloud)
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+for sapi in fpm cli apache2; do
+  if [ -d "/etc/php/${PHP_VERSION}/$sapi/conf.d" ]; then
+    echo -e "extension=apcu.so\napc.enable_cli=1" > "/etc/php/${PHP_VERSION}/$sapi/conf.d/20-apcu.ini"
+  fi
+done
 
 # Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
@@ -240,6 +248,18 @@ chown -R www-data:www-data /var/www/nextcloud/ "${NEXTCLOUD_DATA_DIR}"
 # Initialisieren
 echo -e "${BLUE}[9/10] Nextcloud wird initialisiert...${NC}"
 cd /var/www/nextcloud
+
+# Prüfen, ob APCu funktioniert
+echo -e "${BLUE}→ APCu wird geprüft...${NC}"
+if ! php -r "if (extension_loaded('apcu') && apcu_enabled()) { echo 'APCu OK'; } else { exit(1); }"; then
+  echo -e "${RED}APCu ist nicht richtig konfiguriert. Nutze Fallback-Konfiguration.${NC}"
+  # Fallback für memcache.local auf Array-Cache, wenn APCu nicht verfügbar
+  USE_APCU=false
+else
+  echo -e "${GREEN}APCu ist aktiv und funktioniert.${NC}"
+  USE_APCU=true
+fi
+
 sudo -u www-data php occ maintenance:install \
   --database "mysql" --database-name "${NEXTCLOUD_DB_NAME}" \
   --database-user "${NEXTCLOUD_DB_USER}" --database-pass "${NEXTCLOUD_DB_PASSWORD}" \
@@ -251,8 +271,6 @@ configure_nc() {
   local configs=(
     "trusted_domains 0 --value=\"${DOMAIN_NAME}\""
     "trusted_domains 1 --value=\"${SERVER_IP}\""
-    "memcache.local --value='\OC\Memcache\APCu'"
-    "memcache.locking --value='\OC\Memcache\Redis'"
     "redis host --value='/var/run/redis/redis-server.sock'"
     "redis port --value=0"
     "redis timeout --value=0.0"
@@ -264,6 +282,21 @@ configure_nc() {
   for config in "${configs[@]}"; do
     sudo -u www-data php occ config:system:set $config
   done
+  
+  # Überprüfe und setze Caching-Optionen basierend auf APCu-Verfügbarkeit
+  if $USE_APCU; then
+    sudo -u www-data php occ config:system:set memcache.local --value='\OC\Memcache\APCu'
+  else
+    sudo -u www-data php occ config:system:set memcache.local --value='\OC\Memcache\ArrayCache'
+  fi
+  
+  # Redis-Locking nur verwenden, wenn Redis funktioniert
+  if redis-cli -s /var/run/redis/redis-server.sock ping 2>/dev/null | grep -q "PONG"; then
+    sudo -u www-data php occ config:system:set memcache.locking --value='\OC\Memcache\Redis'
+    echo -e "${GREEN}Redis-Cache aktiviert für Locking.${NC}"
+  else
+    echo -e "${RED}Redis nicht erreichbar. Locking-Cache wird nicht konfiguriert.${NC}"
+  fi
   
   sudo -u www-data php occ maintenance:update:htaccess
 }
