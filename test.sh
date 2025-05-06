@@ -26,7 +26,7 @@ dnf install -y nginx mariadb-server redis certbot sudo \
     php php-fpm php-opcache php-gd php-mysqli php-curl php-mbstring php-json \
     php-xml php-dom php-ctype php-session php-iconv php-pdo php-pdo_mysql \
     php-intl php-fileinfo php-xmlreader php-tokenizer php-zip php-pecl-redis \
-    unzip curl
+    unzip curl openssl
 
 # Dienste aktivieren
 systemctl enable mariadb redis nginx php-fpm
