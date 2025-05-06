@@ -2,7 +2,6 @@
 
 set -e
 
-# Farben
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
@@ -21,38 +20,31 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
-# Alpine prüfen
 if [ ! -f /etc/alpine-release ]; then
   echo -e "${RED}Dieses Skript funktioniert nur auf Alpine Linux.${NC}"
   exit 1
 fi
 
-# Interne IP ermitteln
 INTERNAL_IP=$(ip a | awk '/inet 10\./ || /inet 192\.168\./ {gsub(/\/.*/, "", $2); print $2; exit}')
 if [ -z "$INTERNAL_IP" ]; then
   INTERNAL_IP="127.0.0.1"
 fi
 
-# Pakete
 apk update
 apk upgrade
 apk add php php-fpm php-opcache php-gd php-mysqli php-zlib php-curl php-mbstring php-json php-xml php-dom php-ctype php-session php-iconv \
     php-pdo php-pdo_mysql php-pecl-redis php-intl php-posix php-fileinfo php-simplexml php-tokenizer php-xmlwriter php-xmlreader \
-    mariadb mariadb-client redis nginx curl sudo unzip openssl openssh php-cli php-phar php-zip php-pcntl socat acme.sh iptables
-service sshd start
-apk add denyhosts
+    mariadb mariadb-client redis nginx curl sudo unzip openssl php-cli php-phar php-zip php-pcntl socat acme.sh iptables
+
 rc-update add mariadb default
 rc-update add redis default
 rc-update add php-fpm7 default
 rc-update add nginx default
 rc-update add iptables default
-rc-update add denyhosts default
 
-# DB vorbereiten
 mysql_install_db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
 rc-service mariadb start
 
-# Zugangsdaten
 NEXTCLOUD_DB="nextcloud"
 NEXTCLOUD_USER="nc_user"
 NEXTCLOUD_PASS="$(openssl rand -hex 12)"
@@ -67,14 +59,12 @@ mysql -e "FLUSH PRIVILEGES;"
 rc-service redis start
 rc-service php-fpm7 start
 
-# Nextcloud holen
 cd /var/www/localhost/htdocs || exit 1
 curl -o nextcloud.zip https://download.nextcloud.com/server/releases/latest.zip
 unzip nextcloud.zip
 rm nextcloud.zip
 chown -R nginx:nginx nextcloud
 
-# Let's Encrypt Zertifikat
 mkdir -p /var/lib/acme
 cat > /etc/nginx/conf.d/acme.conf <<EOF
 server {
@@ -96,7 +86,6 @@ acme.sh --install-cert -d "$DOMAIN" \
   --reloadcmd "rc-service nginx reload"
 acme.sh --install-cronjob
 
-# Self-signed Zertifikat für interne IP
 INTERNAL_CERT_DIR="/etc/ssl/nextcloud-internal"
 mkdir -p "$INTERNAL_CERT_DIR"
 openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
@@ -104,7 +93,6 @@ openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
   -out "$INTERNAL_CERT_DIR/selfsigned.crt" \
   -subj "/CN=$INTERNAL_IP"
 
-# Nginx extern
 cat > /etc/nginx/conf.d/nextcloud.conf <<EOF
 server {
     listen 80;
@@ -140,7 +128,6 @@ server {
 }
 EOF
 
-# Nginx intern
 cat > /etc/nginx/conf.d/internal.conf <<EOF
 server {
     listen 443 ssl;
@@ -173,7 +160,6 @@ EOF
 
 rc-service nginx restart
 
-# Nextcloud Setup
 cd /var/www/localhost/htdocs/nextcloud || exit 1
 sudo -u nginx php occ maintenance:install \
   --database "mysql" \
@@ -186,7 +172,6 @@ sudo -u nginx php occ maintenance:install \
 sudo -u nginx php occ config:system:set trusted_domains 1 --value="$DOMAIN"
 sudo -u nginx php occ config:system:set trusted_domains 2 --value="$INTERNAL_IP"
 
-# Zugangsdaten speichern
 CRED_FILE="/root/nextcloud-credentials.txt"
 cat > "$CRED_FILE" <<EOF
 Extern: https://${DOMAIN}
@@ -202,7 +187,6 @@ EOF
 
 chmod 600 "$CRED_FILE"
 
-# Sicherheit
 cat > /etc/iptables/rules-save <<EOF
 *filter
 :INPUT DROP [0:0]
@@ -218,7 +202,6 @@ COMMIT
 EOF
 
 iptables-restore < /etc/iptables/rules-save
-rc-service denyhosts start
 
 echo -e "${GREEN}SSH-Root-Zugriff deaktivieren? (j/N): ${NC}"
 read -r disable_ssh
@@ -229,7 +212,6 @@ if [ "$disable_ssh" = "j" ]; then
   echo -e "${GREEN}SSH-Zugang für root deaktiviert.${NC}"
 fi
 
-# Cronjob für Updates
 echo "0 3 * * * apk update && apk upgrade -y" >> /etc/crontabs/root
 echo "0 4 * * * cd /var/www/localhost/htdocs/nextcloud && sudo -u nginx php occ upgrade" >> /etc/crontabs/root
 
