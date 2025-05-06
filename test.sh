@@ -93,25 +93,22 @@ server {
 }
 EOF
 
-# Zertifikat für interne IP und Domain erstellen
-INTERNAL_IP=$(ip addr show | grep inet | grep -v 127.0.0.1 | awk '{print $2}' | cut -d'/' -f1 | head -n1)
-read -p "Bitte gib deine öffentliche Domain ein (z.B. cloud.example.com): " DOMAIN
-
-# Hosts-Datei aktualisieren (optional, z.B. intern DNS simulieren)
-echo "127.0.0.1   ${DOMAIN}" >> /etc/hosts
-
-# HTTPS einrichten
-certbot certonly --standalone --preferred-challenges http -d "$DOMAIN" || true
-certbot certonly --standalone --preferred-challenges http -d "$INTERNAL_IP" || true
+# Selbstsigniertes SSL-Zertifikat erstellen
+SSL_DIR="/etc/ssl/private"
+mkdir -p $SSL_DIR
+openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
+    -keyout "$SSL_DIR/nextcloud.key" \
+    -out "$SSL_DIR/nextcloud.crt" \
+    -subj "/C=US/ST=State/L=City/O=Nextcloud/OU=IT/CN=localhost"
 
 # HTTPS in nginx aktivieren
 cat << EOF > /etc/nginx/conf.d/ssl.conf
 server {
     listen 443 ssl;
-    server_name $DOMAIN $INTERNAL_IP;
+    server_name localhost;
 
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate $SSL_DIR/nextcloud.crt;
+    ssl_certificate_key $SSL_DIR/nextcloud.key;
 
     root /var/www/nextcloud;
     index index.php;
@@ -125,6 +122,10 @@ server {
         fastcgi_index index.php;
         include fastcgi.conf;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
+
+    location ~ /\.ht {
+        deny all;
     }
 }
 EOF
@@ -150,7 +151,7 @@ chown -R nginx:nginx /var/www/nextcloud
 cat << EOF > /root/nextcloud_credentials.txt
 Nextcloud installiert!
 
-URL: https://$DOMAIN oder https://$INTERNAL_IP
+URL: https://localhost
 
 Admin-Benutzer: $ADMIN_USER
 Admin-Passwort: $ADMIN_PASS
@@ -165,5 +166,6 @@ chmod 600 /root/nextcloud_credentials.txt
 
 # Abschlussnachricht
 echo -e "${GREEN}Nextcloud wurde erfolgreich installiert.${NC}"
-echo -e "${GREEN}Zugriff über: https://$DOMAIN oder https://$INTERNAL_IP${NC}"
+echo -e "${GREEN}Zugriff über: https://localhost${NC}"
 echo -e "${GREEN}Zugangsdaten findest du in: /root/nextcloud_credentials.txt${NC}"
+
