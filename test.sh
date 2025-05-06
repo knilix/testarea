@@ -104,7 +104,7 @@ case "$OS_TYPE" in
       php8-common php8-json php8-intl php8-imagick php8-curl \
       php8-mbstring php8-zip php8-xml php8-gd php8-mysqli \
       php8-bz2 php8-redis php8-apcu unzip curl wget openssl \
-      pv libmagickcore-dev
+      pv imagemagick-dev
     ;;
 esac
 
