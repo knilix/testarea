@@ -85,6 +85,7 @@ case "$OS_TYPE" in
     ;;
   "Alpine")
     apk update && apk upgrade --available
+    apk add openssl
     ;;
 esac
 
