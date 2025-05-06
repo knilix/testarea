@@ -32,8 +32,19 @@ dnf install -y nginx mariadb-server redis certbot sudo \
 systemctl enable mariadb redis nginx php-fpm
 systemctl start mariadb redis nginx php-fpm
 
-# MariaDB einrichten
-mysql_secure_installation
+# Root-Passwort generieren (OpenSSL)
+ROOT_PASS=$(openssl rand -base64 16)
+
+# Root-Passwort direkt setzen
+mysql -e "UPDATE mysql.user SET authentication_string=PASSWORD('$ROOT_PASS') WHERE User='root';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# MariaDB Sicherheitskonfiguration ohne Benutzerinteraktion
+mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test%';"
+mysql -e "DROP USER IF EXISTS ''@'localhost';"
+mysql -e "DROP USER IF EXISTS ''@'$(hostname)';"
+mysql -e "DELETE FROM mysql.user WHERE User='';"
+mysql -e "FLUSH PRIVILEGES;"
 
 # Datenbank und Benutzer anlegen
 DB_NAME="nextcloud"
@@ -146,6 +157,8 @@ Admin-Passwort: $ADMIN_PASS
 
 Datenbank-Benutzer: $DB_USER
 Datenbank-Passwort: $DB_PASS
+
+MariaDB Root-Passwort: $ROOT_PASS
 EOF
 
 chmod 600 /root/nextcloud_credentials.txt
