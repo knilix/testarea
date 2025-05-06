@@ -2,6 +2,7 @@
 # Maintainer: @knilix
 # Version: 1.0
 # Hinweis: Für Debian 12 und Ubuntu ab 22.04+ (x64), root erforderlich
+# Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
 # Mit MariaDB und Redis Cache
 # -----------------------------------------------------------------------------
 # 1. Fehler-Handling und Farben
