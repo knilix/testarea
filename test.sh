@@ -1,47 +1,61 @@
 #!/bin/sh
+
 set -e
 
-RED='\033[0;31m'
+# Farben
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}Dieses Skript installiert Nextcloud mit HTTPS (öffentlich + intern) auf Alpine Linux.${NC}"
-printf "Möchten Sie fortfahren? (j/N): "
-read -r confirm
-if [ "$confirm" != "j" ]; then
-  echo -e "${RED}Abgebrochen.${NC}"
-  exit 1
+echo -e "${GREEN}Dieses Skript installiert Nextcloud, MariaDB, Redis, NGINX und PHP auf Alpine Linux.${NC}"
+read -p "Möchtest du fortfahren? (ja/nein): " confirm
+if [ "$confirm" != "ja" ]; then
+    echo "Abbruch."
+    exit 1
 fi
 
-read -r -p "Gib die öffentliche Domain für HTTPS ein (z. B. cloud.example.com): " DOMAIN
-if [ -z "$DOMAIN" ]; then
-  echo -e "${RED}Keine Domain eingegeben. Abbruch.${NC}"
-  exit 1
+# Distributionsprüfung
+if ! grep -qi "alpine" /etc/os-release; then
+    echo -e "${RED}Dieses Skript ist nur für Alpine Linux gedacht.${NC}"
+    exit 1
 fi
 
-if [ ! -f /etc/alpine-release ]; then
-  echo -e "${RED}Dieses Skript funktioniert nur auf Alpine Linux.${NC}"
-  exit 1
-fi
-
-INTERNAL_IP=$(ip a | awk '/inet 10\./ || /inet 192\.168\./ {gsub(/\/.*/, "", $2); print $2; exit}')
-if [ -z "$INTERNAL_IP" ]; then
-  INTERNAL_IP="127.0.0.1"
-fi
-
+# Paketliste
 apk update
 apk upgrade
-apk add php php-fpm php-opcache php-gd php-mysqli php-zlib php-curl php-mbstring php-json php-xml php-dom php-ctype php-session php-iconv \
-    php-pdo php-pdo_mysql php-pecl-redis php-intl php-posix php-fileinfo php-simplexml php-tokenizer php-xmlwriter php-xmlreader \
-    mariadb mariadb-client redis nginx curl sudo unzip openssl php-cli php-phar php-zip php-pcntl socat acme.sh iptables
+apk add nginx mariadb mariadb-client redis curl unzip certbot sudo
 
-# php-fpm manuell als OpenRC-Dienst einrichten
+# PHP-Version automatisch erkennen
+PHP_VERSION=$(apk info | grep -E '^php[0-9]{2}-fpm$' | head -n1 | cut -d'-' -f1)
+
+if [ -z "$PHP_VERSION" ]; then
+    echo -e "${RED}Keine passende PHP-FPM-Version gefunden. Installiere z. B. php82-fpm und starte das Skript erneut.${NC}"
+    exit 1
+fi
+
+# PHP und Module installieren
+apk add "$PHP_VERSION" \
+    "$PHP_VERSION"-fpm "$PHP_VERSION"-opcache "$PHP_VERSION"-gd "$PHP_VERSION"-mysqli "$PHP_VERSION"-zlib \
+    "$PHP_VERSION"-curl "$PHP_VERSION"-mbstring "$PHP_VERSION"-json "$PHP_VERSION"-xml "$PHP_VERSION"-dom \
+    "$PHP_VERSION"-ctype "$PHP_VERSION"-session "$PHP_VERSION"-iconv "$PHP_VERSION"-pdo "$PHP_VERSION"-pdo_mysql \
+    "$PHP_VERSION"-intl "$PHP_VERSION"-fileinfo "$PHP_VERSION"-simplexml "$PHP_VERSION"-tokenizer \
+    "$PHP_VERSION"-xmlwriter "$PHP_VERSION"-xmlreader "$PHP_VERSION"-phar "$PHP_VERSION"-zip "$PHP_VERSION"-pcntl \
+    php-cli php-pecl-redis
+
+# Dienste aktivieren
+rc-update add mariadb default
+rc-update add redis default
+rc-update add nginx default
+
+# PHP-FPM als OpenRC-Dienst registrieren
+PHP_FPM_BIN="/usr/sbin/${PHP_VERSION}-fpm"
+
 if [ ! -f /etc/init.d/php-fpm ]; then
-cat << 'EOF' > /etc/init.d/php-fpm
+cat << EOF > /etc/init.d/php-fpm
 #!/sbin/openrc-run
 
-command=/usr/sbin/php-fpm
-command_args="-y /etc/php/php-fpm.conf --nodaemonize"
+command=${PHP_FPM_BIN}
+command_args="-y /etc/${PHP_VERSION}/php-fpm.conf --nodaemonize"
 pidfile=/run/php-fpm.pid
 name="PHP-FPM"
 description="PHP FastCGI Process Manager"
@@ -55,89 +69,53 @@ EOF
 chmod +x /etc/init.d/php-fpm
 fi
 
-rc-update add mariadb default
-rc-update add redis default
 rc-update add php-fpm default
-rc-update add nginx default
-rc-update add iptables default
 
-mysql_install_db --user=mysql --basedir=/usr --datadir=/var/lib/mysql
+# Dienste starten
+/etc/init.d/mariadb setup
 rc-service mariadb start
-
-NEXTCLOUD_DB="nextcloud"
-NEXTCLOUD_USER="nc_user"
-NEXTCLOUD_PASS="$(openssl rand -hex 12)"
-NEXTCLOUD_ADMIN="admin"
-NEXTCLOUD_ADMIN_PASS="$(openssl rand -hex 12)"
-
-mysql -e "CREATE DATABASE ${NEXTCLOUD_DB};"
-mysql -e "CREATE USER '${NEXTCLOUD_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_PASS}';"
-mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB}.* TO '${NEXTCLOUD_USER}'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
-
 rc-service redis start
 rc-service php-fpm start
+rc-service nginx start
 
-cd /var/www/localhost/htdocs || exit 1
-curl -o nextcloud.zip https://download.nextcloud.com/server/releases/latest.zip
-unzip nextcloud.zip
-rm nextcloud.zip
+# Nextcloud herunterladen
+mkdir -p /var/www
+cd /var/www
+curl -LO https://download.nextcloud.com/server/releases/latest.zip
+unzip latest.zip
+rm latest.zip
 chown -R nginx:nginx nextcloud
 
-mkdir -p /var/lib/acme
-cat > /etc/nginx/conf.d/acme.conf <<EOF
+# MariaDB vorbereiten
+DB_NAME="nextcloud"
+DB_USER="ncuser"
+DB_PASS=$(head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)
+
+mysql -e "CREATE DATABASE ${DB_NAME};"
+mysql -e "CREATE USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';"
+mysql -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# PHP- und NGINX-Konfiguration
+cat << EOF > /etc/nginx/http.d/nextcloud.conf
 server {
     listen 80;
-    server_name $DOMAIN;
-    location /.well-known/acme-challenge/ {
-        root /var/lib/acme;
-    }
-}
-EOF
-rc-service nginx restart
+    server_name _;
 
-acme.sh --issue -d "$DOMAIN" --webroot /var/lib/acme
-CERT_DIR="/etc/ssl/nextcloud"
-mkdir -p "$CERT_DIR"
-acme.sh --install-cert -d "$DOMAIN" \
-  --key-file "$CERT_DIR/privkey.pem" \
-  --fullchain-file "$CERT_DIR/fullchain.pem" \
-  --reloadcmd "rc-service nginx reload"
-acme.sh --install-cronjob
-
-INTERNAL_CERT_DIR="/etc/ssl/nextcloud-internal"
-mkdir -p "$INTERNAL_CERT_DIR"
-openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
-  -keyout "$INTERNAL_CERT_DIR/selfsigned.key" \
-  -out "$INTERNAL_CERT_DIR/selfsigned.crt" \
-  -subj "/CN=$INTERNAL_IP"
-
-cat > /etc/nginx/conf.d/nextcloud.conf <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-    return 301 https://\$host\$request_uri;
-}
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-
-    ssl_certificate     $CERT_DIR/fullchain.pem;
-    ssl_certificate_key $CERT_DIR/privkey.pem;
-
-    root /var/www/localhost/htdocs/nextcloud;
-    index index.php index.html;
+    root /var/www/nextcloud;
+    index index.php;
 
     client_max_body_size 512M;
+    fastcgi_buffers 64 4K;
 
     location / {
-        try_files \$uri \$uri/ /index.php?\$args;
+        try_files \$uri \$uri/ /index.php\$is_args\$args;
     }
 
     location ~ \.php\$ {
-        include fastcgi_params;
         fastcgi_pass 127.0.0.1:9000;
         fastcgi_index index.php;
+        include fastcgi.conf;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
     }
 
@@ -147,98 +125,75 @@ server {
 }
 EOF
 
-cat > /etc/nginx/conf.d/internal.conf <<EOF
+# Zertifikat für interne IP und Domain erstellen
+INTERNAL_IP=$(ip addr show | grep inet | grep -v 127.0.0.1 | awk '{print $2}' | cut -d'/' -f1 | head -n1)
+read -p "Bitte gib deine öffentliche Domain ein (z.B. cloud.example.com): " DOMAIN
+
+# Hosts-Datei aktualisieren (optional, z.B. intern DNS simulieren)
+echo "127.0.0.1   ${DOMAIN}" >> /etc/hosts
+
+# HTTPS einrichten
+certbot certonly --standalone --preferred-challenges http -d "$DOMAIN" || true
+certbot certonly --standalone --preferred-challenges http -d "$INTERNAL_IP" || true
+
+# HTTPS in nginx aktivieren
+cat << EOF > /etc/nginx/http.d/ssl.conf
 server {
     listen 443 ssl;
-    server_name $INTERNAL_IP;
+    server_name $DOMAIN $INTERNAL_IP;
 
-    ssl_certificate     $INTERNAL_CERT_DIR/selfsigned.crt;
-    ssl_certificate_key $INTERNAL_CERT_DIR/selfsigned.key;
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
-    root /var/www/localhost/htdocs/nextcloud;
-    index index.php index.html;
-
-    client_max_body_size 512M;
+    root /var/www/nextcloud;
+    index index.php;
 
     location / {
-        try_files \$uri \$uri/ /index.php?\$args;
+        try_files \$uri \$uri/ /index.php\$is_args\$args;
     }
 
     location ~ \.php\$ {
-        include fastcgi_params;
         fastcgi_pass 127.0.0.1:9000;
         fastcgi_index index.php;
+        include fastcgi.conf;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-    }
-
-    location ~ /\.ht {
-        deny all;
     }
 }
 EOF
 
 rc-service nginx restart
 
-cd /var/www/localhost/htdocs/nextcloud || exit 1
-sudo -u nginx php occ maintenance:install \
-  --database "mysql" \
-  --database-name "$NEXTCLOUD_DB" \
-  --database-user "$NEXTCLOUD_USER" \
-  --database-pass "$NEXTCLOUD_PASS" \
-  --admin-user "$NEXTCLOUD_ADMIN" \
-  --admin-pass "$NEXTCLOUD_ADMIN_PASS"
+# Zugangsdaten
+ADMIN_USER="admin"
+ADMIN_PASS=$(head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)
 
-sudo -u nginx php occ config:system:set trusted_domains 1 --value="$DOMAIN"
-sudo -u nginx php occ config:system:set trusted_domains 2 --value="$INTERNAL_IP"
+/usr/bin/php /var/www/nextcloud/occ maintenance:install \
+    --database "mysql" \
+    --database-name "$DB_NAME" \
+    --database-user "$DB_USER" \
+    --database-pass "$DB_PASS" \
+    --admin-user "$ADMIN_USER" \
+    --admin-pass "$ADMIN_PASS"
 
-CRED_FILE="/root/nextcloud-credentials.txt"
-cat > "$CRED_FILE" <<EOF
-Extern: https://${DOMAIN}
-Intern: https://${INTERNAL_IP}
+# Rechte
+chown -R nginx:nginx /var/www/nextcloud
 
-Admin-Benutzer: $NEXTCLOUD_ADMIN
-Admin-Passwort: $NEXTCLOUD_ADMIN_PASS
+# Zugangsdaten speichern
+cat << EOF > /root/nextcloud_credentials.txt
+Nextcloud installiert!
 
-Datenbank: $NEXTCLOUD_DB
-DB-Benutzer: $NEXTCLOUD_USER
-DB-Passwort: $NEXTCLOUD_PASS
+URL: https://$DOMAIN oder https://$INTERNAL_IP
+
+Admin-Benutzer: $ADMIN_USER
+Admin-Passwort: $ADMIN_PASS
+
+Datenbank-Benutzer: $DB_USER
+Datenbank-Passwort: $DB_PASS
 EOF
 
-chmod 600 "$CRED_FILE"
+chmod 600 /root/nextcloud_credentials.txt
 
-cat > /etc/iptables/rules-save <<EOF
-*filter
-:INPUT DROP [0:0]
-:FORWARD DROP [0:0]
-:OUTPUT ACCEPT [0:0]
--A INPUT -i lo -j ACCEPT
--A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
--A INPUT -p tcp --dport 22 -j ACCEPT
--A INPUT -p tcp --dport 80 -j ACCEPT
--A INPUT -p tcp --dport 443 -j ACCEPT
--A INPUT -p icmp -j ACCEPT
-COMMIT
-EOF
-
-iptables-restore < /etc/iptables/rules-save
-
-echo -e "${GREEN}SSH-Root-Zugriff deaktivieren? (j/N): ${NC}"
-read -r disable_ssh
-if [ "$disable_ssh" = "j" ]; then
-  sed -i 's/^#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-  sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-  rc-service sshd reload
-  echo -e "${GREEN}SSH-Zugang für root deaktiviert.${NC}"
-fi
-
-echo "0 3 * * * apk update && apk upgrade -y" >> /etc/crontabs/root
-echo "0 4 * * * cd /var/www/localhost/htdocs/nextcloud && sudo -u nginx php occ upgrade" >> /etc/crontabs/root
-
-echo -e "\n${GREEN}✅ Fertig! Nextcloud wurde mit HTTPS für Domain & interne IP installiert.${NC}"
-echo ""
-echo -e "🌐 Extern:  ${GREEN}https://$DOMAIN${NC}"
-echo -e "🏠 Intern:  ${GREEN}https://$INTERNAL_IP${NC}"
-echo -e "🔐 Zugangsdaten: ${GREEN}$CRED_FILE${NC}"
-echo "--------------------------------------------------"
-cat "$CRED_FILE"
-echo "--------------------------------------------------"
+# Abschlussnachricht
+echo -e "${GREEN}Nextcloud wurde erfolgreich installiert.${NC}"
+echo -e "${GREEN}Zugriff über: https://$DOMAIN oder https://$INTERNAL_IP${NC}"
+echo -e "${GREEN}Zugangsdaten findest du in: /root/nextcloud_credentials.txt${NC}"
