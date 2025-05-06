@@ -1,259 +1,167 @@
 #!/bin/bash
-# Maintener: @knilix
-# --> Nur x64 Architektur!
-# root user benötigt (su)
-# Für Debian, Arch, Fedora, Gentoo, FreeBSD, Alpine, Bazzite geeignet.
-# Vorerst NICHT für Ubuntu geeignet!
-# Vorher erledigen: --> installieren von wget und zip 
-# Discord, Gimp, Abiword, Blender, Lutris, Kdenlive, Studio, Musocpod, Bluerecorder, Flameshot, Bottles
-# Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
-# Es wird geprüft, ob die zu installierenden Flatpak-Apps schon per Snap oder Nativ installiert sind. Wenn ja, wird die Installation der jeweiligen Flatpak-App übersprungen.
-# Warnhinweise, die nur informativ sind und keinerlei Einfluss auf die Funktion der jeweiligen App haben, z.B. weil KDE statt Gnome verwendet wird, werden ausgeblendet.
-
-# Farbdefinitionen
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-RED='\033[1;31m'
-GRAY='\033[1;37m'
-NC='\033[0m' # No Color
-
-# Debug-Modus aktivieren, wenn --debug übergeben wird
-if [[ "$1" == "--debug" ]]; then
-  echo -e "${YELLOW}Debug-Modus aktiv. Zeige alle Befehle.${NC}"
-  set -x
-  DEBUG=true
-else
-  DEBUG=false
-fi
-
-echo -e "${GRAY}Starte Skript...${NC}"
-
-# 1. Architektur prüfen
-ARCHITECTURE="$(uname -m)"
-if [ "$ARCHITECTURE" != "x86_64" ]; then
-  echo -e "${RED}Nur x86_64-Architektur wird unterstützt. Beende.${NC}"
-  exit 1
-fi
-
-# 2. Distribution erkennen
-if [ -f /etc/os-release ]; then
-  . /etc/os-release
-  DISTRO=$ID
-elif [ "$(uname -s)" = "FreeBSD" ]; then
-  DISTRO="freebsd"
-elif [ -f /etc/gentoo-release ]; then
-  DISTRO="gentoo"
-elif [ -f /etc/funtoo-release ]; then
-  DISTRO="gentoo"
-elif grep -q "Calculate" /etc/issue 2>/dev/null; then
-  DISTRO="gentoo"
-elif [ -f /etc/os-release ] && grep -iq "bazzite" /etc/os-release; then
-  DISTRO="bazzite"
-else
-  echo -e "${RED}Konnte die Distribution nicht erkennen.${NC}"
-  exit 1
-fi
-
-echo -e "${GREEN}Distribution erkannt: $DISTRO${NC}"
-
-# 3. Prüfen ob Flatpak installiert ist und installieren falls nicht
-if ! command -v flatpak >/dev/null 2>&1; then
-  echo -e "${GRAY}Flatpak ist nicht installiert. Installiere es...${NC}"
-  if [[ "$DISTRO" == "bazzite" ]]; then
-    echo -e "${GREEN}Auf Bazzite basiert, Flatpak sollte vorinstalliert sein.${NC}"
-  else
-    # Für andere Distributionen
-    case "$DISTRO" in
-      debian|ubuntu)
-        apt update && apt install -y flatpak
-        ;;
-      arch)
-        pacman -S --noconfirm flatpak
-        ;;
-      fedora)
-        dnf install -y flatpak
-        ;;
-      alpine)
-        apk add flatpak
-        ;;
-      gentoo)
-        emerge --quiet app-eselect/eselect-repository
-        emerge --quiet flatpak
-        ;;
-      freebsd)
-        pkg install -y flatpak
-        ;;
-      *)
-        echo -e "${RED}Unbekannte Distribution für Flatpak-Installation.${NC}"
-        exit 1
-        ;;
-    esac
-  fi
-else
-  echo -e "${GREEN}Flatpak ist bereits installiert.${NC}"
-fi
-
-# 4. Flathub hinzufügen (nur einmal)
-echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
-# 5. Prüffunktion für native und Snap-Installationen
-is_app_installed() {
-  app_name="$1"
-  flatpak_id="$2"
-  
-  # Überprüfung auf native Installation (basierend auf häufigen Paketnamen)
-  case "$app_name" in
-    discord)
-      native_pkgs="discord discord-bin discord-ptb discord-canary"
-      ;;
-    gimp)
-      native_pkgs="gimp"
-      ;;
-    abiword)
-      native_pkgs="abiword"
-      ;;
-    blender)
-      native_pkgs="blender"
-      ;;
-    lutris)
-      native_pkgs="lutris"
-      ;;
-    kdenlive)
-      native_pkgs="kdenlive"
-      ;;
-    obs-studio)
-      native_pkgs="obs-studio obs"
-      ;;
-    musicpod)
-      native_pkgs="musicpod"
-      ;;
-    bluerecorder)
-      native_pkgs="bluerecorder"
-      ;;
-    flameshot)
-      native_pkgs="flameshot"
-      ;;
-    bottles)
-      native_pkgs="bottles"
-      ;;
-    *)
-      native_pkgs=""
-      ;;
-  esac
-  
-  # Prüfen auf native Installation je nach Distribution
-  for pkg in $native_pkgs; do
-    case "$DISTRO" in
-      debian|ubuntu)
-        if dpkg -l | grep -q "\\b$pkg\\b"; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-      arch)
-        if pacman -Q "$pkg" >/dev/null 2>&1; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-      fedora)
-        if rpm -q "$pkg" >/dev/null 2>&1; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-      alpine)
-        if apk info -e "$pkg" >/dev/null 2>&1; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-      gentoo)
-        if qlist -I | grep -q "\\b$pkg\\b"; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-      freebsd)
-        if pkg info | grep -q "\\b$pkg\\b"; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-      bazzite)
-        if rpm -q "$pkg" >/dev/null 2>&1; then
-          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
-          return 0
-        fi
-        ;;
-    esac
-  done
-  
-  # Prüfen auf Snap-Installation, falls snap verfügbar ist
-  if command -v snap >/dev/null 2>&1; then
-    if snap list 2>/dev/null | grep -q "\\b$app_name\\b"; then
-      echo -e "${GREEN}$app_name ist bereits als Snap installiert.${NC}"
-      return 0
-    fi
-  fi
-  
-  # Prüfen auf Flatpak-Installation
-  if flatpak list | grep -q "$flatpak_id"; then
-    echo -e "${GREEN}$app_name ist bereits als Flatpak installiert.${NC}"
-    return 0
-  fi
-  
-  # App ist nicht installiert
-  return 1
-}
-
-# 6. Flatpak-Apps installieren
-declare -A APP_MAP=(
-  ["com.discordapp.Discord"]="discord"
-  ["org.gimp.GIMP"]="gimp"
-  ["com.abisource.AbiWord"]="abiword"
-  ["org.blender.Blender"]="blender"
-  ["net.lutris.Lutris"]="lutris"
-  ["org.kde.kdenlive"]="kdenlive"
-  ["com.obsproject.Studio"]="obs-studio"
-  ["org.feichtmeier.Musicpod"]="musicpod"
-  ["sa.sy.bluerecorder"]="bluerecorder"
-  ["org.flameshot.Flameshot"]="flameshot"
-  ["com.usebottles.bottles"]="bottles"
-)
-
-FLATPAK_APPS=(
-  "com.discordapp.Discord"
-  "org.gimp.GIMP"
-  "com.abisource.AbiWord"
-  "org.blender.Blender"
-  "net.lutris.Lutris"
-  "org.kde.kdenlive"
-  "com.obsproject.Studio"
-  "org.feichtmeier.Musicpod"
-  "sa.sy.bluerecorder"
-  "org.flameshot.Flameshot"
-  "com.usebottles.bottles"
-)
-
-for app_id in "${FLATPAK_APPS[@]}"; do
-  app_name=${APP_MAP[$app_id]}
-  echo -e "${GRAY}Prüfe Installation: $app_name...${NC}"
-  
-  if ! is_app_installed "$app_name" "$app_id"; then
-    echo -e "${GRAY}Installiere $app_name als Flatpak...${NC}"
-    flatpak install -y flathub "$app_id"
-  else
-    echo -e "${YELLOW}Überspringe Installation von $app_name als Flatpak, da bereits installiert.${NC}"
-  fi
-done
-
-# 7. Aufräumen
-echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
-rm -r /opt/scriptfiles/testarea-main 2>/dev/null
-rm /opt/main.zip 2>/dev/null
-
-echo
-echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
-echo
+ # Maintener: @knilix
+ #
+ # --> Only test - only x64 !
+ #
+ # root user benötigt (su)
+ #
+ # Für Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD, Alpine, CachyOS, Bazzite, Nitrux geeignet.
+ # Vorher erledigen: 
+ # - installieren von wget und zip 
+ #
+ # Es werden mit diesem Script Flatpak und folgende Apps installiert: Discord, Gimp, AbiWord, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles, ProtonPlus, BoxBuddy, 
+ # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI.
+ # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext.
+ # Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
+ # Es wird geprüft of die zu installierenden Flatpak-Apps schon per Snap oder Nativ installiert sind. Wenn ja, wird die Installation der jeweiligen Flatpak-App übersprungen.
+ # Warnhinweise, die nur informativ sind und keinerlei Einfluss auf die Funktion der jeweiligen App haben, z.B. weil KDE statt Gnome verwendet wird, werden ausgeblendet.
+ #
+ # root user required (su)
+ #
+ # Suitable for Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD, Alpine, CachyOS, Bazzite, Nitrux.
+ # Do it beforehand:
+ # - install wget and zip
+ #
+ # This script installs Flatpak and the following apps: Discord, Gimp, AbiWord, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles, ProtonPlus, BoxBuddy, Clapgrep, Filelight,
+ # Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI.
+ # Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext.
+ # The system checks whether Flatpak is installed. If not, it is installed.
+ # The system checks whether the Flatpak apps to be installed are already installed via Snap or Native. If yes, the installation of the respective Flatpak app is skipped.
+ # Warnings that are only informative and have no influence on the function of the respective app, e.g. because KDE is used instead of Gnome, are hidden.
+ #
+ ################################################################################################################################################################################################################
+ #
+ # download and unzip: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/flatpak-installs.sh
+ # execute (unique): cd /opt/scriptfiles/testarea-main && ./flatpak-installs.sh
+ #
+ #################################################################################################################################################################################################################
+ # Farbdefinitionen
+ GREEN='\033[1;32m'
+ YELLOW='\033[1;33m'
+ RED='\033[1;31m'
+ GRAY='\033[1;37m'
+ NC='\033[0m' # No Color
+ 
+ # Debug-Modus aktivieren, wenn --debug übergeben wird
+ if [[ "$1" == "--debug" ]]; then
+   echo -e "${YELLOW}Debug-Modus aktiv. Zeige alle Befehle.${NC}"
+   set -x
+   DEBUG=true
+ else
+   DEBUG=false
+ fi
+ 
+ echo -e "${GRAY}Starte Skript...${NC}"
+ 
+ # 1. Architektur prüfen
+ ARCHITECTURE="$(uname -m)"
+ if [ "$ARCHITECTURE" != "x86_64" ]; then
+   echo -e "${RED}Nur x86_64-Architektur wird unterstützt. Beende.${NC}"
+   exit 1
+ fi
+ 
+ # 2. Distribution erkennen
+ if [ -f /etc/os-release ]; then
+   . /etc/os-release
+   DISTRO=$ID
+ elif [ "$(uname -s)" = "FreeBSD" ]; then
+   DISTRO="freebsd"
+ elif [ -f /etc/gentoo-release ]; then
+   DISTRO="gentoo"
+ elif [ -f /etc/funtoo-release ]; then
+   DISTRO="gentoo"
+ elif grep -q "Calculate" /etc/issue 2>/dev/null; then
+   DISTRO="gentoo"
+ elif [ -f /etc/os-release ] && grep -iq "bazzite" /etc/os-release; then
+   DISTRO="bazzite"
+ else
+   echo -e "${RED}Konnte die Distribution nicht erkennen.${NC}"
+   exit 1
+ fi
+ 
+ echo -e "${GREEN}Distribution erkannt: $DISTRO${NC}"
+ 
+ # 3. Flatpak Installation sicherstellen
+ if ! command -v flatpak >/dev/null 2>&1; then
+   echo -e "${GRAY}Flatpak ist nicht installiert. Installiere es...${NC}"
+   if [[ "$DISTRO" == "bazzite" ]]; then
+     echo -e "${GREEN}Auf Bazzite basiert, Flatpak sollte vorinstalliert sein.${NC}"
+   else
+     # Für andere Distributionen
+     case "$DISTRO" in
+       debian|ubuntu)
+         apt update && apt install -y flatpak
+         ;;
+       arch)
+         pacman -S --noconfirm flatpak
+         ;;
+       fedora)
+         dnf install -y flatpak
+         ;;
+       alpine)
+         apk add flatpak
+         ;;
+       gentoo)
+         emerge --quiet app-eselect/eselect-repository
+         emerge --quiet flatpak
+         ;;
+       freebsd)
+         pkg install -y flatpak
+         ;;
+       *)
+         echo -e "${RED}Unbekannte Distribution für Flatpak-Installation.${NC}"
+         exit 1
+         ;;
+     esac
+   fi
+ fi
+ 
+ # 4. Flathub hinzufügen (nur einmal)
+ echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
+ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+ 
+ # 5. Flatpak-Apps installieren
+ FLATPAK_APPS=(
+   "com.discordapp.Discord"
+   "org.gimp.GIMP"
+   "com.abisource.AbiWord"
+   "org.blender.Blender"
+   "net.lutris.Lutris"
+   "org.kde.kdenlive"
+   "com.obsproject.Studio"
+   "org.feichtmeier.Musicpod"
+   "sa.sy.bluerecorder"
+   "org.flameshot.Flameshot"
+   "com.usebottles.bottles"
+   "com.vysp3r.ProtonPlus"
+   "io.github.dvlv.boxbuddyrs"
+   "de.leopoldluley.Clapgrep"
+   "org.kde.filelight"
+   "com.github.tchx84.Flatseal"
+   "it.mijorus.gearlever"
+   "org.gimp.GIMP"
+   "me.ahola.aphototoollibre"
+   "com.github.Matoking.protontricks"
+   "io.github.flattool.Warehouse"
+   "io.github.fastrizwaan.WineZGUI"
+   "com.github.dail8859.NotepadNext"
+ )
+ 
+ for app in "${FLATPAK_APPS[@]}"; do
+   echo -e "${GRAY}Prüfe Installation: $app...${NC}"
+   if flatpak list | grep -q "$app"; then
+     echo -e "${GREEN}$app ist bereits installiert.${NC}"
+   else
+     echo -e "${GRAY}Installiere $app...${NC}"
+     flatpak install -y flathub "$app"
+   fi
+ done
+ 
+ # 6. Aufräumen
+ echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+ rm -r /opt/scriptfiles/testarea-main 2>/dev/null
+ rm /opt/main.zip 2>/dev/null
+ #
+ echo
+ echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
+ echo
