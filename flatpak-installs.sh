@@ -64,7 +64,7 @@ if ! command -v flatpak >/dev/null 2>&1; then
     # Für andere Distributionen
     case "$DISTRO" in
       debian|ubuntu)
-        apt update && apt install -y flatpak
+        apt update && apt install -y flatpak gnome-software-plugin-flatpak
         ;;
       arch)
         pacman -S --noconfirm flatpak
@@ -92,9 +92,38 @@ else
   echo -e "${GREEN}Flatpak ist bereits installiert.${NC}"
 fi
 
-# 4. Flathub hinzufügen (nur einmal)
-echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+# Nach der Installation von Flatpak neustarten, wenn nötig (besonders für Ubuntu)
+if [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ]; then
+  echo -e "${YELLOW}Hinweis: Auf manchen Ubuntu/Debian-Systemen kann ein Neustart nach der ersten Flatpak-Installation nötig sein.${NC}"
+  echo -e "${YELLOW}Falls Fehler auftreten, bitte das System neustarten und das Skript erneut ausführen.${NC}"
+fi
+
+# 4. Flathub hinzufügen (nur einmal) mit Netzwerkprüfung
+echo -e "${GRAY}Prüfe Netzwerkverbindung zu Flathub...${NC}"
+if ping -c 1 flathub.org >/dev/null 2>&1; then
+  echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
+  if ! flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo; then
+    echo -e "${RED}Fehler beim Hinzufügen des Flathub-Repositories. Überprüfe die Netzwerkverbindung.${NC}"
+    echo -e "${YELLOW}Versuche es mit einer alternativen Methode...${NC}"
+    # Manueller Download der Repo-Datei als Fallback
+    wget -q -O /tmp/flathub.flatpakrepo https://flathub.org/repo/flathub.flatpakrepo
+    if [ -f /tmp/flathub.flatpakrepo ]; then
+      flatpak remote-add --if-not-exists flathub /tmp/flathub.flatpakrepo
+      rm /tmp/flathub.flatpakrepo
+    else
+      echo -e "${RED}Konnte das Flathub-Repository nicht hinzufügen. Installationen werden wahrscheinlich fehlschlagen.${NC}"
+    fi
+  fi
+else
+  echo -e "${RED}Keine Verbindung zu Flathub möglich. Überprüfe deine Internetverbindung.${NC}"
+  echo -e "${YELLOW}Prüfe, ob Flathub bereits als Remote konfiguriert ist...${NC}"
+  if ! flatpak remotes | grep -q "flathub"; then
+    echo -e "${RED}Flathub ist nicht konfiguriert und kann nicht hinzugefügt werden. Installationen werden fehlschlagen.${NC}"
+    echo -e "${YELLOW}Das Skript wird fortgesetzt, aber Installationen werden wahrscheinlich fehlschlagen.${NC}"
+  else
+    echo -e "${GREEN}Flathub ist bereits als Remote konfiguriert.${NC}"
+  fi
+fi
 
 # 5. Prüffunktion für native und Snap-Installationen
 is_app_installed() {
@@ -242,7 +271,14 @@ for app_id in "${FLATPAK_APPS[@]}"; do
   
   if ! is_app_installed "$app_name" "$app_id"; then
     echo -e "${GRAY}Installiere $app_name als Flatpak...${NC}"
-    flatpak install -y flathub "$app_id"
+    # Prüfe, ob Flathub als Remote verfügbar ist
+    if flatpak remotes | grep -q "flathub"; then
+      if ! flatpak install -y flathub "$app_id"; then
+        echo -e "${RED}Installation von $app_name fehlgeschlagen. Überspringe.${NC}"
+      fi
+    else
+      echo -e "${RED}Flathub-Repository ist nicht verfügbar. Kann $app_name nicht installieren.${NC}"
+    fi
   else
     echo -e "${YELLOW}Überspringe Installation von $app_name als Flatpak, da bereits installiert.${NC}"
   fi
