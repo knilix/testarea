@@ -25,7 +25,7 @@ apk update
 apk upgrade
 apk add nginx mariadb mariadb-client redis curl unzip certbot sudo
 
-# PHP-Version automatisch erkennen
+# PHP-FPM-Version automatisch erkennen
 PHP_VERSION=$(apk info | grep -E '^php[0-9]{2}-fpm$' | head -n1 | cut -d'-' -f1)
 
 if [ -z "$PHP_VERSION" ]; then
