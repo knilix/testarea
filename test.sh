@@ -21,7 +21,6 @@ if [ "$confirm" != "ja" ]; then
 fi
 
 # Paketliste installieren
-dnf install -y epel-release
 dnf update -y
 dnf install -y nginx mariadb-server redis certbot sudo \
     php php-fpm php-opcache php-gd php-mysqli php-curl php-mbstring php-json \
@@ -155,4 +154,3 @@ chmod 600 /root/nextcloud_credentials.txt
 echo -e "${GREEN}Nextcloud wurde erfolgreich installiert.${NC}"
 echo -e "${GREEN}Zugriff über: https://$DOMAIN oder https://$INTERNAL_IP${NC}"
 echo -e "${GREEN}Zugangsdaten findest du in: /root/nextcloud_credentials.txt${NC}"
-
