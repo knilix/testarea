@@ -100,10 +100,10 @@ case "$OS_TYPE" in
       php-gmp
     ;;
   "Alpine")
-    apk add --no-cache mariadb mariadb-client redis apache2 php8 php8-fpm \
-      php8-common php8-json php8-intl php8-imagick php8-curl \
-      php8-mbstring php8-zip php8-xml php8-gd php8-mysqli \
-      php8-bz2 php8-redis php8-apcu unzip curl wget openssl \
+    apk add --no-cache mariadb mariadb-client redis apache2 php php-fpm \
+      php-common php-json php-intl php-imagick php-curl \
+      php-mbstring php-zip php-xml php-gd php-mysqli \
+      php-bz2 php-redis php-apcu unzip curl wget openssl \
       pv imagemagick-dev
     ;;
 esac
