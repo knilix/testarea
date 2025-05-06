@@ -38,7 +38,7 @@ apk add php php-fpm php-opcache php-gd php-mysqli php-zlib php-curl php-mbstring
 
 rc-update add mariadb default
 rc-update add redis default
-rc-update add php-fpm7 default
+rc-update add php-fpm default
 rc-update add nginx default
 rc-update add iptables default
 
