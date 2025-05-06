@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
@@ -7,86 +7,36 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}Dieses Skript installiert Nextcloud, MariaDB, Redis, NGINX und PHP auf Alpine Linux.${NC}"
+# Distributionsprüfung: Nur Fedora zulässig
+if ! grep -qi "fedora" /etc/os-release; then
+    echo -e "${RED}Dieses Skript ist nur für Fedora gedacht. Abbruch...${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Dieses Skript installiert Nextcloud, MariaDB, Redis, NGINX und PHP auf Fedora.${NC}"
 read -p "Möchtest du fortfahren? (ja/nein): " confirm
 if [ "$confirm" != "ja" ]; then
     echo "Abbruch."
     exit 1
 fi
 
-# Distributionsprüfung
-if ! grep -qi "alpine" /etc/os-release; then
-    echo -e "${RED}Dieses Skript ist nur für Alpine Linux gedacht.${NC}"
-    exit 1
-fi
-
-# Paketliste
-apk update
-apk upgrade
-apk add nginx mariadb mariadb-client redis curl unzip certbot sudo
-
-# PHP-FPM-Version automatisch erkennen
-PHP_VERSION=$(apk info | grep -E '^php[0-9]{2}-fpm$' | head -n1 | cut -d'-' -f1)
-
-if [ -z "$PHP_VERSION" ]; then
-    echo -e "${RED}Keine passende PHP-FPM-Version gefunden. Installiere z. B. php82-fpm und starte das Skript erneut.${NC}"
-    exit 1
-fi
-
-# PHP und Module installieren
-apk add "$PHP_VERSION" \
-    "$PHP_VERSION"-fpm "$PHP_VERSION"-opcache "$PHP_VERSION"-gd "$PHP_VERSION"-mysqli "$PHP_VERSION"-zlib \
-    "$PHP_VERSION"-curl "$PHP_VERSION"-mbstring "$PHP_VERSION"-json "$PHP_VERSION"-xml "$PHP_VERSION"-dom \
-    "$PHP_VERSION"-ctype "$PHP_VERSION"-session "$PHP_VERSION"-iconv "$PHP_VERSION"-pdo "$PHP_VERSION"-pdo_mysql \
-    "$PHP_VERSION"-intl "$PHP_VERSION"-fileinfo "$PHP_VERSION"-simplexml "$PHP_VERSION"-tokenizer \
-    "$PHP_VERSION"-xmlwriter "$PHP_VERSION"-xmlreader "$PHP_VERSION"-phar "$PHP_VERSION"-zip "$PHP_VERSION"-pcntl \
-    php-cli php-pecl-redis
+# Paketliste installieren
+dnf install -y epel-release
+dnf update -y
+dnf install -y nginx mariadb-server redis certbot sudo \
+    php php-fpm php-opcache php-gd php-mysqli php-curl php-mbstring php-json \
+    php-xml php-dom php-ctype php-session php-iconv php-pdo php-pdo_mysql \
+    php-intl php-fileinfo php-xmlreader php-tokenizer php-zip php-pecl-redis \
+    unzip curl
 
 # Dienste aktivieren
-rc-update add mariadb default
-rc-update add redis default
-rc-update add nginx default
+systemctl enable mariadb redis nginx php-fpm
+systemctl start mariadb redis nginx php-fpm
 
-# PHP-FPM als OpenRC-Dienst registrieren
-PHP_FPM_BIN="/usr/sbin/${PHP_VERSION}-fpm"
+# MariaDB einrichten
+mysql_secure_installation
 
-if [ ! -f /etc/init.d/php-fpm ]; then
-cat << EOF > /etc/init.d/php-fpm
-#!/sbin/openrc-run
-
-command=${PHP_FPM_BIN}
-command_args="-y /etc/${PHP_VERSION}/php-fpm.conf --nodaemonize"
-pidfile=/run/php-fpm.pid
-name="PHP-FPM"
-description="PHP FastCGI Process Manager"
-
-depend() {
-    need net
-    use mysql
-    after firewall
-}
-EOF
-chmod +x /etc/init.d/php-fpm
-fi
-
-rc-update add php-fpm default
-
-# Dienste starten
-/etc/init.d/mariadb setup
-rc-service mariadb start
-rc-service redis start
-rc-service php-fpm start
-rc-service nginx start
-
-# Nextcloud herunterladen
-mkdir -p /var/www
-cd /var/www
-curl -LO https://download.nextcloud.com/server/releases/latest.zip
-unzip latest.zip
-rm latest.zip
-chown -R nginx:nginx nextcloud
-
-# MariaDB vorbereiten
+# Datenbank und Benutzer anlegen
 DB_NAME="nextcloud"
 DB_USER="ncuser"
 DB_PASS=$(head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)
@@ -96,8 +46,16 @@ mysql -e "CREATE USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';"
 mysql -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';"
 mysql -e "FLUSH PRIVILEGES;"
 
+# Nextcloud herunterladen
+mkdir -p /var/www
+cd /var/www
+curl -LO https://download.nextcloud.com/server/releases/latest.zip
+unzip latest.zip
+rm latest.zip
+chown -R nginx:nginx nextcloud
+
 # PHP- und NGINX-Konfiguration
-cat << EOF > /etc/nginx/http.d/nextcloud.conf
+cat << EOF > /etc/nginx/conf.d/nextcloud.conf
 server {
     listen 80;
     server_name _;
@@ -137,7 +95,7 @@ certbot certonly --standalone --preferred-challenges http -d "$DOMAIN" || true
 certbot certonly --standalone --preferred-challenges http -d "$INTERNAL_IP" || true
 
 # HTTPS in nginx aktivieren
-cat << EOF > /etc/nginx/http.d/ssl.conf
+cat << EOF > /etc/nginx/conf.d/ssl.conf
 server {
     listen 443 ssl;
     server_name $DOMAIN $INTERNAL_IP;
@@ -161,7 +119,7 @@ server {
 }
 EOF
 
-rc-service nginx restart
+systemctl restart nginx
 
 # Zugangsdaten
 ADMIN_USER="admin"
@@ -197,3 +155,4 @@ chmod 600 /root/nextcloud_credentials.txt
 echo -e "${GREEN}Nextcloud wurde erfolgreich installiert.${NC}"
 echo -e "${GREEN}Zugriff über: https://$DOMAIN oder https://$INTERNAL_IP${NC}"
 echo -e "${GREEN}Zugangsdaten findest du in: /root/nextcloud_credentials.txt${NC}"
+
