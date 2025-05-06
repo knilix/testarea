@@ -2,7 +2,8 @@
 # Maintener: @knilix
 # --> Nur x64 Architektur!
 # root user benötigt (su)
-# Für Debian, Ubuntu, Arch, Fedora, Gentoo, FreeBSD, Alpine, Bazzite geeignet.
+# Für Debian, Arch, Fedora, Gentoo, FreeBSD, Alpine, Bazzite geeignet.
+# Vorerst NICHT für Ubuntu geeignet!
 # Vorher erledigen: --> installieren von wget und zip 
 # Discord, Gimp, Abiword, Blender, Lutris, Kdenlive, Studio, Musocpod, Bluerecorder, Flameshot, Bottles
 # Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
