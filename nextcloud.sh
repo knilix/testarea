@@ -13,6 +13,14 @@ GREEN='\033[0;32m'; BLUE='\033[0;34m'; RED='\033[0;31m'; GRAY='\033[0;37m'; NC='
 # 2. Root-Check
 [[ "$EUID" -ne 0 ]] && { echo -e "${RED}Bitte führen Sie das Script als root aus.${NC}"; exit 1; }
 
+# Datenbank-Check
+if mysql -e "USE nextcloud;" 2>/dev/null; then
+    echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+    rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
+    echo -e "${GREEN}Datenbank existiert bereits. Installation wird übersprungen.${NC}"
+    exit 0
+fi
+
 # 3. OS-Check
 [[ ! -f /etc/os-release ]] && { echo -e "${RED}Konnte Betriebssystem nicht erkennen. Das Script benötigt Debian 12 oder Ubuntu 22.04+.${NC}"; exit 1; }
 
