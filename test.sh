@@ -38,8 +38,9 @@ apk update
 apk upgrade
 apk add php php-fpm php-opcache php-gd php-mysqli php-zlib php-curl php-mbstring php-json php-xml php-dom php-ctype php-session php-iconv \
     php-pdo php-pdo_mysql php-pecl-redis php-intl php-posix php-fileinfo php-simplexml php-tokenizer php-xmlwriter php-xmlreader \
-    mariadb mariadb-client redis nginx curl sudo unzip openssl php-cli php-phar php-zip php-pcntl socat acme.sh iptables denyhosts
-
+    mariadb mariadb-client redis nginx curl sudo unzip openssl openssh php-cli php-phar php-zip php-pcntl socat acme.sh iptables
+service sshd start
+apk add denyhosts
 rc-update add mariadb default
 rc-update add redis default
 rc-update add php-fpm7 default
