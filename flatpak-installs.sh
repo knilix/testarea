@@ -1,4 +1,33 @@
-#!/bin/bash
+# Funktion zum Prüfen der Internetverbindung
+check_internet_connection() {
+  echo -e "${GRAY}Prüfe Internetverbindung...${NC}"
+  
+  # Verschiedene Hosts zum Testen der Verbindung
+  for host in "google.com" "cloudflare.com" "1.1.1.1"; do
+    if ping -c 1 -W 3 $host >/dev/null 2>&1; then
+      echo -e "${GREEN}Internetverbindung ist verfügbar.${NC}"
+      return 0
+    fi
+  done
+  
+  echo -e "${RED}Keine Internetverbindung verfügbar!${NC}"
+  
+  # Prüfe DNS-Einstellungen
+  echo -e "${GRAY}Prüfe DNS-Konfiguration...${NC}"
+  
+  if [ -f /etc/resolv.conf ]; then
+    echo -e "${YELLOW}Aktuelle DNS-Server:${NC}"
+    grep "nameserver" /etc/resolv.conf || echo -e "${RED}Keine Nameserver gefunden!${NC}"
+  else
+    echo -e "${RED}Datei /etc/resolv.conf nicht gefunden!${NC}"
+  fi
+  
+  echo -e "${YELLOW}Empfehlung: Versuche, die DNS-Server manuell zu konfigurieren, z.B. mit:${NC}"
+  echo -e "${GRAY}echo 'nameserver 8.8.8.8' > /etc/resolv.conf${NC}"
+  echo -e "${GRAY}echo 'nameserver 1.1.1.1' >> /etc/resolv.conf${NC}"
+  
+  return 1
+}#!/bin/bash
 # Maintener: @knilix
 # --> Nur x64 Architektur!
 # root user benötigt (su)
@@ -98,31 +127,45 @@ if [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ]; then
   echo -e "${YELLOW}Falls Fehler auftreten, bitte das System neustarten und das Skript erneut ausführen.${NC}"
 fi
 
+# Internetverbindung prüfen vor dem Fortfahren
+check_internet_connection
+INTERNET_AVAILABLE=$?
+
 # 4. Flathub hinzufügen (nur einmal) mit Netzwerkprüfung
-echo -e "${GRAY}Prüfe Netzwerkverbindung zu Flathub...${NC}"
-if ping -c 1 flathub.org >/dev/null 2>&1; then
-  echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
-  if ! flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo; then
-    echo -e "${RED}Fehler beim Hinzufügen des Flathub-Repositories. Überprüfe die Netzwerkverbindung.${NC}"
-    echo -e "${YELLOW}Versuche es mit einer alternativen Methode...${NC}"
-    # Manueller Download der Repo-Datei als Fallback
-    wget -q -O /tmp/flathub.flatpakrepo https://flathub.org/repo/flathub.flatpakrepo
-    if [ -f /tmp/flathub.flatpakrepo ]; then
-      flatpak remote-add --if-not-exists flathub /tmp/flathub.flatpakrepo
-      rm /tmp/flathub.flatpakrepo
-    else
-      echo -e "${RED}Konnte das Flathub-Repository nicht hinzufügen. Installationen werden wahrscheinlich fehlschlagen.${NC}"
+if [ $INTERNET_AVAILABLE -eq 0 ]; then
+  echo -e "${GRAY}Prüfe Netzwerkverbindung zu Flathub...${NC}"
+  if ping -c 1 -W 3 flathub.org >/dev/null 2>&1; then
+    echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
+    if ! flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo; then
+      echo -e "${RED}Fehler beim Hinzufügen des Flathub-Repositories. Überprüfe die Netzwerkverbindung.${NC}"
+      echo -e "${YELLOW}Versuche es mit einer alternativen Methode...${NC}"
+      # Manueller Download der Repo-Datei als Fallback
+      if wget -q --timeout=10 -O /tmp/flathub.flatpakrepo https://flathub.org/repo/flathub.flatpakrepo; then
+        flatpak remote-add --if-not-exists flathub /tmp/flathub.flatpakrepo
+        rm /tmp/flathub.flatpakrepo
+      else
+        echo -e "${RED}Konnte das Flathub-Repository nicht hinzufügen. Installationen werden wahrscheinlich fehlschlagen.${NC}"
+      fi
     fi
+  else
+    echo -e "${RED}Keine Verbindung zu Flathub möglich. Prüfe DNS-Einstellungen oder Proxy-Konfiguration.${NC}"
   fi
 else
-  echo -e "${RED}Keine Verbindung zu Flathub möglich. Überprüfe deine Internetverbindung.${NC}"
-  echo -e "${YELLOW}Prüfe, ob Flathub bereits als Remote konfiguriert ist...${NC}"
-  if ! flatpak remotes | grep -q "flathub"; then
-    echo -e "${RED}Flathub ist nicht konfiguriert und kann nicht hinzugefügt werden. Installationen werden fehlschlagen.${NC}"
-    echo -e "${YELLOW}Das Skript wird fortgesetzt, aber Installationen werden wahrscheinlich fehlschlagen.${NC}"
-  else
-    echo -e "${GREEN}Flathub ist bereits als Remote konfiguriert.${NC}"
+  echo -e "${RED}Keine Internetverbindung verfügbar. Überprüfe Netzwerkeinstellungen.${NC}"
+  echo -e "${YELLOW}Das Skript wird versuchen, mit offline vorhandenen Paketen fortzufahren.${NC}"
+fi
+
+# Prüfe, ob Flathub-Repository hinzugefügt wurde
+if ! flatpak remotes | grep -q "flathub"; then
+  echo -e "${RED}Warnung: Flathub-Repository ist nicht verfügbar. Die meisten Installationen werden fehlschlagen.${NC}"
+  echo -e "${YELLOW}Möchtest du trotzdem fortfahren? (J/n)${NC}"
+  read -r answer
+  if [[ "$answer" =~ ^[Nn]$ ]]; then
+    echo -e "${RED}Installation abgebrochen.${NC}"
+    exit 1
   fi
+else
+  echo -e "${GREEN}Flathub-Repository erfolgreich eingerichtet.${NC}"
 fi
 
 # 5. Prüffunktion für native und Snap-Installationen
@@ -270,17 +313,57 @@ for app_id in "${FLATPAK_APPS[@]}"; do
   echo -e "${GRAY}Prüfe Installation: $app_name...${NC}"
   
   if ! is_app_installed "$app_name" "$app_id"; then
-    echo -e "${GRAY}Installiere $app_name als Flatpak...${NC}"
-    # Prüfe, ob Flathub als Remote verfügbar ist
-    if flatpak remotes | grep -q "flathub"; then
+    if [ $INTERNET_AVAILABLE -eq 0 ] && flatpak remotes | grep -q "flathub"; then
+      echo -e "${GRAY}Installiere $app_name als Flatpak...${NC}"
       if ! flatpak install -y flathub "$app_id"; then
-        echo -e "${RED}Installation von $app_name fehlgeschlagen. Überspringe.${NC}"
+        echo -e "${RED}Installation von $app_name fehlgeschlagen.${NC}"
+        # Fallback-Methode: Versuche alternative Installation
+        case "$DISTRO" in
+          debian|ubuntu)
+            echo -e "${YELLOW}Versuche native Installation über apt...${NC}"
+            if apt-cache search "^$app_name$" >/dev/null 2>&1; then
+              apt install -y "$app_name"
+            else
+              echo -e "${RED}$app_name ist nicht als natives Paket verfügbar.${NC}"
+            fi
+            ;;
+          *)
+            echo -e "${RED}Überspringe $app_name.${NC}"
+            ;;
+        esac
       fi
     else
-      echo -e "${RED}Flathub-Repository ist nicht verfügbar. Kann $app_name nicht installieren.${NC}"
+      # Wenn keine Internetverbindung oder Flathub nicht verfügbar ist, versuche native Installation
+      echo -e "${YELLOW}Flathub nicht verfügbar. Versuche native Installation von $app_name...${NC}"
+      case "$DISTRO" in
+        debian|ubuntu)
+          if apt-cache search "^$app_name$" >/dev/null 2>&1; then
+            apt install -y "$app_name"
+          else
+            echo -e "${RED}$app_name ist nicht als natives Paket verfügbar.${NC}"
+          fi
+          ;;
+        arch)
+          if pacman -Ss "^$app_name$" >/dev/null 2>&1; then
+            pacman -S --noconfirm "$app_name"
+          else
+            echo -e "${RED}$app_name ist nicht als natives Paket verfügbar.${NC}"
+          fi
+          ;;
+        fedora)
+          if dnf search "$app_name" >/dev/null 2>&1; then
+            dnf install -y "$app_name"
+          else
+            echo -e "${RED}$app_name ist nicht als natives Paket verfügbar.${NC}"
+          fi
+          ;;
+        *)
+          echo -e "${RED}Keine Installationsmethode für $app_name verfügbar.${NC}"
+          ;;
+      esac
     fi
   else
-    echo -e "${YELLOW}Überspringe Installation von $app_name als Flatpak, da bereits installiert.${NC}"
+    echo -e "${YELLOW}Überspringe Installation von $app_name, da bereits installiert.${NC}"
   fi
 done
 
