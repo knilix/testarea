@@ -12,63 +12,63 @@ trap 'echo "Ein Fehler ist aufgetreten. Installation wurde abgebrochen."' ERR
 GREEN='\033[0;32m'; BLUE='\033[0;34m'; RED='\033[0;31m'; GRAY='\033[0;37m'; NC='\033[0m'
 
 # 2. Root-Check
-[[ "<span class="math-inline">EUID" \-ne 0 \]\] && \{ echo \-e "</span>{RED}Bitte führen Sie das Script als root aus.<span class="math-inline">\{NC\}"; exit 1; \}
-\# 3\. OS\-Check
-if \! grep \-q "Alpine Linux" /etc/os\-release; then
-echo \-e "</span>{RED}Dieses Script ist für Alpine Linux gedacht. Erkannte System: <span class="math-inline">\(grep \-oP '\(?<\=^ID\=\)\.\+' /etc/os\-release\)</span>{NC}"
+[[ "$EUID" -ne 0 ]] && { echo -e "${RED}Bitte führen Sie das Script als root aus.${NC}"; exit 1; }
+# 3. OS-Check
+if ! grep -q "Alpine Linux" /etc/os-release; then
+    echo -e "${RED}Dieses Script ist für Alpine Linux gedacht. Erkannte System: $(grep -oP '(?<=^ID=).+' /etc/os-release)${NC}"
     exit 1
 fi
-OS_VERSION=<span class="math-inline">\(grep \-oP '\(?<\=VERSION\_ID\="\)\.\*?\(?\="\)' /etc/os\-release\)
-echo \-e "</span>{BLUE}Alpine Linux <span class="math-inline">OS\_VERSION erkannt\. Fahre fort\.\.\.</span>{NC}"
+OS_VERSION=$(grep -oP '(?<=VERSION_ID=").*?(?=")' /etc/os-release)
+echo -e "${BLUE}Alpine Linux $OS_VERSION erkannt. Fahre fort...${NC}"
 
 # 4. Konfigurationsparameter
-MYSQL_ROOT_PASSWORD=<span class="math-inline">\(openssl rand \-base64 32\)
-NEXTCLOUD\_DB\_PASSWORD\=</span>(openssl rand -base64 32)
+MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32)
+NEXTCLOUD_DB_PASSWORD=$(openssl rand -base64 32)
 NEXTCLOUD_DB_NAME="nextcloud"
 NEXTCLOUD_DB_USER="nextcloud"
 NEXTCLOUD_ADMIN_USER="admin"
-NEXTCLOUD_ADMIN_PASSWORD=<span class="math-inline">\(openssl rand \-base64 24\)
-NEXTCLOUD\_DATA\_DIR\="/var/www/nextcloud/data"
-CREDENTIALS\_FILE\="/root/\.nextcloud\_credentials"
-SERVER\_IP\=</span>(hostname -I | awk '{print <span class="math-inline">1\}'\)
-DOMAIN\_NAME\=</span>(hostname -f)
-[[ "$DOMAIN_NAME" = "localhost" || -z "$DOMAIN_NAME" ]] && DOMAIN_NAME=<span class="math-inline">SERVER\_IP
+NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 24)
+NEXTCLOUD_DATA_DIR="/var/www/nextcloud/data"
+CREDENTIALS_FILE="/root/.nextcloud_credentials"
+SERVER_IP=$(hostname -I | awk '{print $1}')
+DOMAIN_NAME=$(hostname -f)
+[[ "$DOMAIN_NAME" = "localhost" || -z "$DOMAIN_NAME" ]] && DOMAIN_NAME=$SERVER_IP
 clear
-\# 5\. Installationsparameter anzeigen
-echo \-e "</span>{BLUE}=== Nextcloud Installationsscript für Alpine Linux ====<span class="math-inline">\{NC\}"
-echo \-e "</span>{BLUE}Dieses Script installiert Nextcloud mit MariaDB und Redis.<span class="math-inline">\{NC\}\\n"
-echo \-e "</span>{GREEN}Installationsparameter:${NC}"
-echo -e "IP-Adresse: ${GREEN}<span class="math-inline">SERVER\_IP</span>{NC}"
-echo -e "Admin Benutzer: ${GREEN}<span class="math-inline">NEXTCLOUD\_ADMIN\_USER</span>{NC}"
-echo -e "Datenbank: ${GREEN}<span class="math-inline">NEXTCLOUD\_DB\_NAME</span>{NC}\n"
+# 5. Installationsparameter anzeigen
+echo -e "${BLUE}=== Nextcloud Installationsscript für Alpine Linux ====${NC}"
+echo -e "${BLUE}Dieses Script installiert Nextcloud mit MariaDB und Redis.${NC}\n"
+echo -e "${GREEN}Installationsparameter:${NC}"
+echo -e "IP-Adresse: ${GREEN}$SERVER_IP${NC}"
+echo -e "Admin Benutzer: ${GREEN}$NEXTCLOUD_ADMIN_USER${NC}"
+echo -e "Datenbank: ${GREEN}$NEXTCLOUD_DB_NAME${NC}\n"
 
 # 6. Bestätigung
 read -p "Installation starten? (j/n): " CONFIRM
-[[ $CONFIRM != "j" && <span class="math-inline">CONFIRM \!\= "J" \]\] && \{ echo "Installation abgebrochen\."; exit 0; \}
-\# 7\. System aktualisieren
-echo \-e "</span>{BLUE}[1/10] System wird aktualisiert...<span class="math-inline">\{NC\}"
-apk update && apk upgrade \-y
-\# 8\. Benötigte Pakete installieren
+[[ $CONFIRM != "j" && $CONFIRM != "J" ]] && { echo "Installation abgebrochen."; exit 0; }
+# 7. System aktualisieren
+echo -e "${BLUE}[1/10] System wird aktualisiert...${NC}"
+apk update && apk upgrade -y
+# 8. Benötigte Pakete installieren
 echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
 apk add --no-cache apache2 mariadb mariadb-client redis \
     php php-fpm php-mysqli php-pdo_mysql php-json php-intl php-imagick \
     php-curl php-mbstring php-zip php-xml php-gd php-bz2 php-redis \
     php-apcu php-gmp libmagic
-\# 9\. Apache für PHP konfigurieren
-echo \-e "</span>{BLUE}[3/10] Apache für PHP konfigurieren...<span class="math-inline">\{NC\}"
-sed \-i 's/\#LoadModule rewrite\_module/LoadModule rewrite\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule headers\_module/LoadModule headers\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule env\_module/LoadModule env\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule dir\_module/LoadModule dir\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule mime\_module/LoadModule mime\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule ssl\_module/LoadModule ssl\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#Include conf\\/extra\\/httpd\-ssl\.conf/\#Include conf\\/extra\\/httpd\-ssl\.conf/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule proxy\_module/LoadModule proxy\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/\#LoadModule proxy\_fcgi\_module/LoadModule proxy\_fcgi\_module/' /etc/apache2/httpd\.conf
-sed \-i 's/Listen 80/Listen 80\\nListen 443/' /etc/apache2/httpd\.conf
-\# PHP\-FPM Konfiguration
+# 9. Apache für PHP konfigurieren
+echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
+sed -i 's/#LoadModule rewrite_module/LoadModule rewrite_module/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule headers_module/LoadModule headers_module/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule env_module/LoadModule env_module/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule dir_module/LoadModule dir_module/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule mime_module/LoadModule mime_module/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule ssl_module/LoadModule ssl_module/' /etc/apache2/httpd.conf
+sed -i 's/#Include conf\/extra\/httpd-ssl.conf/#Include conf\/extra\/httpd-ssl.conf/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule proxy_module/LoadModule proxy_module/' /etc/apache2/httpd.conf
+sed -i 's/#LoadModule proxy_fcgi_module/LoadModule proxy_fcgi_module/' /etc/apache2/httpd.conf
+sed -i 's/Listen 80/Listen 80\nListen 443/' /etc/apache2/httpd.conf
+# PHP-FPM Konfiguration
 echo "
-<FilesMatch \\\.php</span>>
+<FilesMatch \.php$>
     SetHandler application/x-httpd-php
 </FilesMatch>
 " > /etc/apache2/conf.d/php.conf
@@ -77,7 +77,7 @@ rc-update add apache2 default
 rc-service apache2 restart
 
 # 10. MariaDB konfigurieren
-echo -e "<span class="math-inline">\{BLUE\}\[4/10\] MariaDB wird konfiguriert\.\.\.</span>{NC}"
+echo -e "${BLUE}[4/10] MariaDB wird konfiguriert...${NC}"
 rc-update add mariadb default
 rc-service mariadb start
 
@@ -87,10 +87,10 @@ mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost',
 mysql -e "DROP DATABASE IF EXISTS test;"
 mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
 
-mysql -e "CREATE DATABASE IF NOT EXISTS <span class="math-inline">\{NEXTCLOUD\_DB\_NAME\} CHARACTER SET utf8mb4 COLLATE utf8mb4\_general\_ci;"
-USER\_EXISTS\=</span>(mysql -e "SELECT User FROM mysql.user WHERE User='<span class="math-inline">\{NEXTCLOUD\_DB\_USER\}';" \| grep \-o "</span>{NEXTCLOUD_DB_USER}" || echo "")
-[[ -z "<span class="math-inline">USER\_EXISTS" \]\] && mysql \-e "CREATE USER '</span>{NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
-mysql -e "GRANT ALL PRIVILEGES ON <span class="math-inline">\{NEXTCLOUD\_DB\_NAME\}\.\* TO '</span>{NEXTCLOUD_DB_USER}'@'localhost';"
+mysql -e "CREATE DATABASE IF NOT EXISTS ${NEXTCLOUD_DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+USER_EXISTS=$(mysql -e "SELECT User FROM mysql.user WHERE User='${NEXTCLOUD_DB_USER}';" | grep -o "${NEXTCLOUD_DB_USER}" || echo "")
+[[ -z "$USER_EXISTS" ]] && mysql -e "CREATE USER '${NEXTCLOUD_DB_USER}'@'localhost' IDENTIFIED BY '${NEXTCLOUD_DB_PASSWORD}';"
+mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB_NAME}.* TO '${NEXTCLOUD_DB_USER}'@'localhost';"
 mysql -e "FLUSH PRIVILEGES;"
 
 # MariaDB-Konfiguration für Nextcloud
@@ -108,7 +108,7 @@ EOF
 rc-service mariadb restart
 
 # 11. Redis konfigurieren
-echo -e "<span class="math-inline">\{BLUE\}\[5/10\] Redis wird konfiguriert\.\.\.</span>{NC}"
+echo -e "${BLUE}[5/10] Redis wird konfiguriert...${NC}"
 rc-update add redis default
 rc-service redis start
 
@@ -123,121 +123,124 @@ adduser -G redis www-data
 rc-service redis restart
 
 # 12. PHP für Nextcloud optimieren
-echo -e "<span class="math-inline">\{BLUE\}\[6/10\] PHP\-Konfiguration für Nextcloud optimieren\.\.\.</span>{NC}"
+echo -e "${BLUE}[6/10] PHP-Konfiguration für Nextcloud optimieren...${NC}"
 for sapi in fpm cli apache2; do
-    if [ "<span class="math-inline">sapi" \= "fpm" \]; then
-PHP\_INI\_DIR\="/etc/php</span>{PHP_VERSION}/fpm"
-    elif [ "<span class="math-inline">sapi" \= "cli" \]; then
-PHP\_INI\_DIR\="/etc/php</span>{PHP_VERSION}/cli"
-    elif [ "<span class="math-inline">sapi" \= "apache2" \]; then
-PHP\_INI\_DIR\="/etc/php</span>{PHP_VERSION}/apache2"
+    if [ "$sapi" = "fpm" ]; then
+        PHP_INI_DIR="/etc/php/fpm" # Alpine hat keine Versionsnummer im Pfad
+    elif [ "$sapi" = "cli" ]; then
+        PHP_INI_DIR="/etc/php/cli" # Alpine hat keine Versionsnummer im Pfad
+    elif [ "$sapi" = "apache2" ]; then
+        PHP_INI_DIR="/etc/php/apache2" # Alpine hat keine Versionsnummer im Pfad
     else
         continue
     fi
 
-    if [ -d "<span class="math-inline">PHP\_INI\_DIR/conf\.d" \]; then
-echo \-e "</span>{BLUE}→ PHP-SAPI: <span class="math-inline">sapi wird konfiguriert\.\.\.</span>{NC}"
-        cat > "<span class="math-inline">PHP\_INI\_DIR/conf\.d/99\-nextcloud\.ini" << EOF
-memory\_limit \= 512M
-upload\_max\_filesize \= 500M
-post\_max\_size \= 500M
-max\_execution\_time \= 300
-date\.timezone \= Europe/Berlin
-opcache\.enable\=1
-opcache\.interned\_strings\_buffer\=32
-opcache\.max\_accelerated\_files\=10000
-opcache\.memory\_consumption\=128
-opcache\.save\_comments\=1
-opcache\.revalidate\_freq\=1
+    if [ -d "$PHP_INI_DIR/conf.d" ]; then
+        echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
+        cat > "$PHP_INI_DIR/conf.d/99-nextcloud.ini" << EOF
+memory_limit = 512M
+upload_max_filesize = 500M
+post_max_size = 500M
+max_execution_time = 300
+date.timezone = Europe/Berlin
+opcache.enable=1
+opcache.interned_strings_buffer=32
+opcache.max_accelerated_files=10000
+opcache.memory_consumption=128
+opcache.save_comments=1
+opcache.revalidate_freq=1
 EOF
-fi
+    fi
 done
-\# PHP\-FPM neustarten
-rc\-service php\-fpm82 restart
-\# 13\. Apache Virtual Host konfigurieren
-echo \-e "</span>{BLUE}[7/10] Apache Virtual Host für Nextcloud wird konfiguriert...<span class="math-inline">\{NC\}"
-mkdir \-p /etc/ssl/nextcloud/
-openssl req \-x509 \-nodes \-days 365 \-newkey rsa\:2048 \\
-\-keyout /etc/ssl/nextcloud/nextcloud\.key \\
-\-out /etc/ssl/nextcloud/nextcloud\.crt \\
-\-subj "/CN\=</span>{DOMAIN_NAME}/O=Nextcloud/C=DE"
+# PHP-FPM neustarten
+rc-service php-fpm restart # Alpine verwendet php-fpm ohne Versionsnummer
+# 13. Apache Virtual Host konfigurieren
+echo -e "${BLUE}[7/10] Apache Virtual Host für Nextcloud wird konfiguriert...${NC}"
+mkdir -p /etc/ssl/nextcloud/
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/ssl/nextcloud/nextcloud.key \
+    -out /etc/ssl/nextcloud/nextcloud.crt \
+    -subj "/CN=${DOMAIN_NAME}/O=Nextcloud/C=DE"
 
 cat > /etc/apache2/conf.d/nextcloud.conf << EOF
 <VirtualHost *:80>
-    ServerName <span class="math-inline">\{DOMAIN\_NAME\}
-Redirect permanent / https\://</span>{DOMAIN_NAME}/
+    ServerName ${DOMAIN_NAME}
+    Redirect permanent / https://${DOMAIN_NAME}/
 </VirtualHost>
 
 <VirtualHost *:443>
-    ServerName <span class="math-inline">\{DOMAIN\_NAME\}
-DocumentRoot /var/www/nextcloud
-SSLEngine on
-SSLCertificateFile /etc/ssl/nextcloud/nextcloud\.crt
-SSLCertificateKeyFile /etc/ssl/nextcloud/nextcloud\.key
-<IfModule mod\_headers\.c\>
-Header always set Strict\-Transport\-Security "max\-age\=15552000; includeSubDomains"
-</IfModule\>
-<Directory /var/www/nextcloud\>
-Options \+FollowSymlinks
-AllowOverride All
-Require all granted
-<IfModule mod\_dav\.c\>
-Dav off
-</IfModule\>
-SetEnv HOME /var/www/nextcloud
-SetEnv HTTP\_HOME /var/www/nextcloud
-</Directory\>
-ErrorLog /var/log/apache2/nextcloud\_error\.log
-CustomLog /var/log/apache2/nextcloud\_access\.log combined
-</VirtualHost\>
+    ServerName ${DOMAIN_NAME}
+    DocumentRoot /var/www/nextcloud
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/nextcloud/nextcloud.crt
+    SSLCertificateKeyFile /etc/ssl/nextcloud/nextcloud.key
+
+    <IfModule mod_headers.c>
+        Header always set Strict-Transport-Security "max-age=15552000; includeSubDomains"
+    </IfModule>
+
+    <Directory /var/www/nextcloud>
+        Options +FollowSymlinks
+        AllowOverride All
+        Require all granted
+        <IfModule mod_dav.c>
+            Dav off
+        </IfModule>
+        SetEnv HOME /var/www/nextcloud
+        SetEnv HTTP_HOME /var/www/nextcloud
+    </Directory>
+
+    ErrorLog /var/log/apache2/nextcloud_error.log
+    CustomLog /var/log/apache2/nextcloud_access.log combined
+</VirtualHost>
 EOF
-rc\-service apache2 reload
-\# 14\. Nextcloud installieren
-echo \-e "</span>{BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...<span class="math-inline">\{NC\}"
-wget \-q https\://download\.nextcloud\.com/server/releases/latest\.zip \-O /tmp/nextcloud\.zip
-unzip \-q /tmp/nextcloud\.zip \-d /var/www/
-rm /tmp/nextcloud\.zip
-mkdir \-p "</span>{NEXTCLOUD_DATA_DIR}"
-chown -R www-data:www-data /var/www/nextcloud/ "<span class="math-inline">\{NEXTCLOUD\_DATA\_DIR\}"
-\# 15\. Initialisieren
-echo \-e "</span>{BLUE}[9/10] Nextcloud wird initialisiert...<span class="math-inline">\{NC\}"
+rc-service apache2 reload
+# 14. Nextcloud installieren
+echo -e "${BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...${NC}"
+wget -q https://download.nextcloud.com/server/releases/latest.zip -O /tmp/nextcloud.zip
+unzip -q /tmp/nextcloud.zip -d /var/www/
+rm /tmp/nextcloud.zip
+mkdir -p "${NEXTCLOUD_DATA_DIR}"
+chown -R www-data:www-data /var/www/nextcloud/ "${NEXTCLOUD_DATA_DIR}"
+# 15. Initialisieren
+echo -e "${BLUE}[9/10] Nextcloud wird initialisiert...${NC}"
 cd /var/www/nextcloud
-sudo \-u www\-data php occ maintenance\:install \\
-\-\-database "mysql" \\
-\-\-database\-name "</span>{NEXTCLOUD_DB_NAME}" \
-    --database-user "<span class="math-inline">\{NEXTCLOUD\_DB\_USER\}" \\
-\-\-database\-pass "</span>{NEXTCLOUD_DB_PASSWORD}" \
-    --admin-user "<span class="math-inline">\{NEXTCLOUD\_ADMIN\_USER\}" \\
-\-\-admin\-pass "</span>{NEXTCLOUD_ADMIN_PASSWORD}" \
-    --data-dir "<span class="math-inline">\{NEXTCLOUD\_DATA\_DIR\}"
-\# Nextcloud Konfiguration
-sudo \-u www\-data php occ config\:system\:set trusted\_domains 0 \-\-value\="</span>{DOMAIN_NAME}" \
-&& sudo -u www-data php occ config:system:set trusted_domains 1 --value="<span class="math-inline">\{SERVER\_IP\}" \\
-&& sudo \-u www\-data php occ config\:system\:set memcache\.local \-\-value\='\\OC\\Memcache\\APCu' \\
-&& sudo \-u www\-data php occ config\:system\:set memcache\.locking \-\-value\='\\OC\\Memcache\\Redis' \\
-&& sudo \-u www\-data php occ config\:system\:set redis host \-\-value\='/run/redis/redis\.sock' \\
-&& sudo \-u www\-data php occ config\:system\:set redis port \-\-value\=0 \\
-&& sudo \-u www\-data php occ config\:system\:set redis timeout \-\-value\=0\.0 \\
-&& sudo \-u www\-data php occ config\:system\:set trusted\_proxies 0 \-\-value\="127\.0\.0\.1" \\
-&& sudo \-u www\-data php occ config\:system\:set overwriteprotocol \-\-value\="https" \\
-&& sudo \-u www\-data php occ config\:system\:set htaccess\.RewriteBase \-\-value\="/" \\
-&& sudo \-u www\-data php occ maintenance\:update\:htaccess
-\# 16\. Cronjob
-echo "\*/5 \* \* \* \* www\-data php \-f /var/www/nextcloud/cron\.php" \> /etc/crontabs/www\-data
-crontab /etc/crontabs/www\-data
-\# 17\. Zugangsdaten speichern
-cat \> "</span>{CREDENTIALS_FILE}" << EOF
-NEXTCLOUD_URL_DOMAIN=https://<span class="math-inline">\{DOMAIN\_NAME\}
-NEXTCLOUD\_URL\_IP\=https\://</span>{SERVER_IP}
-NEXTCLOUD_ADMIN_USER=<span class="math-inline">\{NEXTCLOUD\_ADMIN\_USER\}
-NEXTCLOUD\_ADMIN\_PASSWORD\=</span>{NEXTCLOUD_ADMIN_PASSWORD}
-MYSQL_ROOT_PASSWORD=<span class="math-inline">\{MYSQL\_ROOT\_PASSWORD\}
-NEXTCLOUD\_DB\_NAME\=</span>{NEXTCLOUD_DB_NAME}
-NEXTCLOUD_DB_USER=<span class="math-inline">\{NEXTCLOUD\_DB\_USER\}
-NEXTCLOUD\_DB\_PASSWORD\=</span>{NEXTCLOUD_DB_PASSWORD}
-INSTALLATION_DATE=<span class="math-inline">\(date \+"%Y\-%m\-%d %H\:%M\:%S"\)
+sudo -u www-data php occ maintenance:install \
+    --database "mysql" \
+    --database-name "${NEXTCLOUD_DB_NAME}" \
+    --database-user "${NEXTCLOUD_DB_USER}" \
+    --database-pass "${NEXTCLOUD_DB_PASSWORD}" \
+    --admin-user "${NEXTCLOUD_ADMIN_USER}" \
+    --admin-pass "${NEXTCLOUD_ADMIN_PASSWORD}" \
+    --data-dir "${NEXTCLOUD_DATA_DIR}"
+# Nextcloud Konfiguration
+sudo -u www-data php occ config:system:set trusted_domains 0 --value="${DOMAIN_NAME}" \
+&& sudo -u www-data php occ config:system:set trusted_domains 1 --value="${SERVER_IP}" \
+&& sudo -u www-data php occ config:system:set memcache.local --value='\OC\Memcache\APCu' \
+&& sudo -u www-data php occ config:system:set memcache.locking --value='\OC\Memcache\Redis' \
+&& sudo -u www-data php occ config:system:set redis host --value='/run/redis/redis.sock' \
+&& sudo -u www-data php occ config:system:set redis port --value=0 \
+&& sudo -u www-data php occ config:system:set redis timeout --value=0.0 \
+&& sudo -u www-data php occ config:system:set trusted_proxies 0 --value="127.0.0.1" \
+&& sudo -u www-data php occ config:system:set overwriteprotocol --value="https" \
+&& sudo -u www-data php occ config:system:set htaccess.RewriteBase --value="/" \
+&& sudo -u www-data php occ maintenance:update:htaccess
+# 16. Cronjob
+echo "*/5 * * * * www-data php -f /var/www/nextcloud/cron.php" > /etc/crontabs/www-data
+crontab /etc/crontabs/www-data
+# 17. Zugangsdaten speichern
+cat > "${CREDENTIALS_FILE}" << EOF
+NEXTCLOUD_URL_DOMAIN=https://${DOMAIN_NAME}
+NEXTCLOUD_URL_IP=https://${SERVER_IP}
+NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER}
+NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+NEXTCLOUD_DB_NAME=${NEXTCLOUD_DB_NAME}
+NEXTCLOUD_DB_USER=${NEXTCLOUD_DB_USER}
+NEXTCLOUD_DB_PASSWORD=${NEXTCLOUD_DB_PASSWORD}
+INSTALLATION_DATE=$(date +"%Y-%m-%d %H:%M:%S")
 EOF
-chmod 600 "</span>{CREDENTIALS_FILE}"
+chmod 600 "${CREDENTIALS_FILE}"
 
 # 18. Anmeldedaten anzeigen Befehl
 cat > /usr/local/bin/nextcloud-credentials << 'EOF'
@@ -247,31 +250,80 @@ cat > /usr/local/bin/nextcloud-credentials << 'EOF'
 CRED_FILE="/root/.nextcloud_credentials"
 [[ ! -f "$CRED_FILE" ]] && { echo "Keine Nextcloud-Anmeldedaten gefunden!"; exit 1; }
 
-source "<span class="math-inline">CRED\_FILE"
-GREEN\='\\033\[0;32m'
-BLUE\='\\033\[0;34m'
-NC\='\\033\[0m'
-echo \-e "</span>{BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
-echo -e "Nextcloud URL (Domain): <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_URL_DOMAIN}${NC}"
-echo -e "Nextcloud URL (IP): <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_URL_IP}${NC}"
-echo -e "Admin Benutzer: <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_ADMIN_USER}${NC}"
-echo -e "Admin Passwort: <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_ADMIN_PASSWORD}<span class="math-inline">\{NC\}"
-echo \-e "\\n</span>{BLUE}MariaDB Datenbank:${NC}"
-echo -e "Root Passwort: <span class="math-inline">\{GREEN\}</span>{MYSQL_ROOT_PASSWORD}${NC}"
-echo -e "Datenbank: <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_DB_NAME}${NC}"
-echo -e "DB Benutzer: <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_DB_USER}${NC}"
-echo -e "DB Passwort: <span class="math-inline">\{GREEN\}</span>{NEXTCLOUD_DB_PASSWORD}${NC}"
-echo -e "\nInstalliert am: <span class="math-inline">\{GREEN\}</span>{INSTALLATION_DATE}${NC}"
+source "$CRED_FILE"
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
+echo -e "Nextcloud URL (Domain): ${GREEN}${NEXTCLOUD_URL_DOMAIN}${NC}"
+echo -e "Nextcloud URL (IP): ${GREEN}${NEXTCLOUD_URL_IP}${NC}"
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo -e "\n${BLUE}MariaDB Datenbank:${NC}"
+echo -e "Root Passwort: ${GREEN}${MYSQL_ROOT_PASSWORD}${NC}"
+echo -e "Datenbank: ${GREEN}${NEXTCLOUD_DB_NAME}${NC}"
+echo -e "DB Benutzer: ${GREEN}${NEXTCLOUD_DB_USER}${NC}"
+echo -e "DB Passwort: ${GREEN}${NEXTCLOUD_DB_PASSWORD}${NC}"
+echo -e "\nInstalliert am: ${GREEN}${INSTALLATION_DATE}${NC}"
 EOF
 chmod +x /usr/local/bin/nextcloud-credentials
 
 # 19. Zusätzliche Nextcloud-Konfiguration
 config_file="/var/www/nextcloud/config/config.php"
-if [ -f "<span class="math-inline">config\_file" \]; then
-tmp\_file\=</span>(mktemp)
+if [ -f "$config_file" ]; then
+    tmp_file=$(mktemp)
     awk '
         /^\);$/ {
             print "  '\''default_phone_region'\'' => '\''DE'\'',";
             print "  '\''enable_previews'\'' => true,";
             print "  '\''enabledPreviewProviders'\'' => array (";
-            print
+            print "    0 => '\''OC\\\\\\\\Preview\\\\\\\\PNG'\'',";
+            print "    1 => '\''OC\\\\\\\\Preview\\\\\\\\JPEG'\'',";
+            print "    2 => '\''OC\\\\\\\\Preview\\\\\\\\GIF'\'',";
+            print "    3 => '\''OC\\\\\\\\Preview\\\\\\\\BMP'\'',";
+            print "    4 => '\''OC\\\\\\\\Preview\\\\\\\\XBitmap'\'',";
+            print "    5 => '\''OC\\\\\\\\Preview\\\\\\\\MP3'\'',";
+            print "    6 => '\''OC\\\\\\\\Preview\\\\\\\\TXT'\'',";
+            print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
+            print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
+            print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
+            print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
+            print "  ),";
+            print "  '\''maintenance_window_start'\'' => 1,";
+        }
+        { print }
+    ' "$config_file" > "$tmp_file"
+    cp "$config_file" "${config_file}.bak"
+    cp "$tmp_file" "$config_file"
+    rm "$tmp_file"
+fi
+
+# 20. Letzter Feinschliff
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
+sudo -u www-data php occ maintenance:repair --include-expensive
+sudo systemctl restart apache2
+
+# Fortschrittsbalken
+echo "Warte, bis der Webserver vollständig hochgefahren ist..."
+for i in $(seq 1 10); do echo -n "#"; sleep 1; done
+echo
+
+# Log bereinigen
+rm -f /var/www/nextcloud/data/nextcloud.log
+curl -s -o /dev/null http://localhost || true
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
+
+# Bereinigen
+rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
+
+# 21. Abschlussmeldung
+clear
+echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
+echo -e "\n${BLUE}Zugangsdaten:${NC}"
+echo -e "Admin Benutzer: ${GREEN}${NEXTCLOUD_ADMIN_USER}${NC}"
+echo -e "Admin Passwort: ${GREEN}${NEXTCLOUD_ADMIN_PASSWORD}${NC}"
+echo
+echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====${NC}"
+echo -e "Anmeldung unter folgendem Link:\n"
+echo -e "IP:    ${BLUE}https://${SERVER_IP}${NC}"
+echo -e "\nBenutzen Sie den Befehl ${GREEN}nextcloud-credentials${NC}, um Ihre kompletten Zugangsdaten anzuzeigen."
