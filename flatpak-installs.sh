@@ -1,33 +1,4 @@
-# Funktion zum Prüfen der Internetverbindung
-check_internet_connection() {
-  echo -e "${GRAY}Prüfe Internetverbindung...${NC}"
-  
-  # Verschiedene Hosts zum Testen der Verbindung
-  for host in "google.com" "cloudflare.com" "1.1.1.1"; do
-    if ping -c 1 -W 3 $host >/dev/null 2>&1; then
-      echo -e "${GREEN}Internetverbindung ist verfügbar.${NC}"
-      return 0
-    fi
-  done
-  
-  echo -e "${RED}Keine Internetverbindung verfügbar!${NC}"
-  
-  # Prüfe DNS-Einstellungen
-  echo -e "${GRAY}Prüfe DNS-Konfiguration...${NC}"
-  
-  if [ -f /etc/resolv.conf ]; then
-    echo -e "${YELLOW}Aktuelle DNS-Server:${NC}"
-    grep "nameserver" /etc/resolv.conf || echo -e "${RED}Keine Nameserver gefunden!${NC}"
-  else
-    echo -e "${RED}Datei /etc/resolv.conf nicht gefunden!${NC}"
-  fi
-  
-  echo -e "${YELLOW}Empfehlung: Versuche, die DNS-Server manuell zu konfigurieren, z.B. mit:${NC}"
-  echo -e "${GRAY}echo 'nameserver 8.8.8.8' > /etc/resolv.conf${NC}"
-  echo -e "${GRAY}echo 'nameserver 1.1.1.1' >> /etc/resolv.conf${NC}"
-  
-  return 1
-}#!/bin/bash
+#!/bin/bash
 # Maintener: @knilix
 # --> Nur x64 Architektur!
 # root user benötigt (su)
@@ -83,6 +54,37 @@ else
 fi
 
 echo -e "${GREEN}Distribution erkannt: $DISTRO${NC}"
+
+# Funktion zum Prüfen der Internetverbindung
+check_internet_connection() {
+  echo -e "${GRAY}Prüfe Internetverbindung...${NC}"
+  
+  # Verschiedene Hosts zum Testen der Verbindung
+  for host in "google.com" "cloudflare.com" "1.1.1.1"; do
+    if ping -c 1 -W 3 $host >/dev/null 2>&1; then
+      echo -e "${GREEN}Internetverbindung ist verfügbar.${NC}"
+      return 0
+    fi
+  done
+  
+  echo -e "${RED}Keine Internetverbindung verfügbar!${NC}"
+  
+  # Prüfe DNS-Einstellungen
+  echo -e "${GRAY}Prüfe DNS-Konfiguration...${NC}"
+  
+  if [ -f /etc/resolv.conf ]; then
+    echo -e "${YELLOW}Aktuelle DNS-Server:${NC}"
+    grep "nameserver" /etc/resolv.conf || echo -e "${RED}Keine Nameserver gefunden!${NC}"
+  else
+    echo -e "${RED}Datei /etc/resolv.conf nicht gefunden!${NC}"
+  fi
+  
+  echo -e "${YELLOW}Empfehlung: Versuche, die DNS-Server manuell zu konfigurieren, z.B. mit:${NC}"
+  echo -e "${GRAY}echo 'nameserver 8.8.8.8' > /etc/resolv.conf${NC}"
+  echo -e "${GRAY}echo 'nameserver 1.1.1.1' >> /etc/resolv.conf${NC}"
+  
+  return 1
+}
 
 # 3. Prüfen ob Flatpak installiert ist und installieren falls nicht
 if ! command -v flatpak >/dev/null 2>&1; then
