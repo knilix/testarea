@@ -55,7 +55,7 @@ fi
 
 echo -e "${GREEN}Distribution erkannt: $DISTRO${NC}"
 
-# 3. Flatpak Installation sicherstellen
+# 3. Prüfen ob Flatpak installiert ist und installieren falls nicht
 if ! command -v flatpak >/dev/null 2>&1; then
   echo -e "${GRAY}Flatpak ist nicht installiert. Installiere es...${NC}"
   if [[ "$DISTRO" == "bazzite" ]]; then
@@ -88,13 +88,140 @@ if ! command -v flatpak >/dev/null 2>&1; then
         ;;
     esac
   fi
+else
+  echo -e "${GREEN}Flatpak ist bereits installiert.${NC}"
 fi
 
 # 4. Flathub hinzufügen (nur einmal)
 echo -e "${GRAY}Füge Flathub-Repository hinzu (falls noch nicht vorhanden)...${NC}"
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
-# 5. Flatpak-Apps installieren
+# 5. Prüffunktion für native und Snap-Installationen
+is_app_installed() {
+  app_name="$1"
+  flatpak_id="$2"
+  
+  # Überprüfung auf native Installation (basierend auf häufigen Paketnamen)
+  case "$app_name" in
+    discord)
+      native_pkgs="discord discord-bin discord-ptb discord-canary"
+      ;;
+    gimp)
+      native_pkgs="gimp"
+      ;;
+    abiword)
+      native_pkgs="abiword"
+      ;;
+    blender)
+      native_pkgs="blender"
+      ;;
+    lutris)
+      native_pkgs="lutris"
+      ;;
+    kdenlive)
+      native_pkgs="kdenlive"
+      ;;
+    obs-studio)
+      native_pkgs="obs-studio obs"
+      ;;
+    musicpod)
+      native_pkgs="musicpod"
+      ;;
+    bluerecorder)
+      native_pkgs="bluerecorder"
+      ;;
+    flameshot)
+      native_pkgs="flameshot"
+      ;;
+    bottles)
+      native_pkgs="bottles"
+      ;;
+    *)
+      native_pkgs=""
+      ;;
+  esac
+  
+  # Prüfen auf native Installation je nach Distribution
+  for pkg in $native_pkgs; do
+    case "$DISTRO" in
+      debian|ubuntu)
+        if dpkg -l | grep -q "\\b$pkg\\b"; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+      arch)
+        if pacman -Q "$pkg" >/dev/null 2>&1; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+      fedora)
+        if rpm -q "$pkg" >/dev/null 2>&1; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+      alpine)
+        if apk info -e "$pkg" >/dev/null 2>&1; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+      gentoo)
+        if qlist -I | grep -q "\\b$pkg\\b"; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+      freebsd)
+        if pkg info | grep -q "\\b$pkg\\b"; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+      bazzite)
+        if rpm -q "$pkg" >/dev/null 2>&1; then
+          echo -e "${GREEN}$app_name ist bereits nativ installiert.${NC}"
+          return 0
+        fi
+        ;;
+    esac
+  done
+  
+  # Prüfen auf Snap-Installation, falls snap verfügbar ist
+  if command -v snap >/dev/null 2>&1; then
+    if snap list 2>/dev/null | grep -q "\\b$app_name\\b"; then
+      echo -e "${GREEN}$app_name ist bereits als Snap installiert.${NC}"
+      return 0
+    fi
+  fi
+  
+  # Prüfen auf Flatpak-Installation
+  if flatpak list | grep -q "$flatpak_id"; then
+    echo -e "${GREEN}$app_name ist bereits als Flatpak installiert.${NC}"
+    return 0
+  fi
+  
+  # App ist nicht installiert
+  return 1
+}
+
+# 6. Flatpak-Apps installieren
+declare -A APP_MAP=(
+  ["com.discordapp.Discord"]="discord"
+  ["org.gimp.GIMP"]="gimp"
+  ["com.abisource.AbiWord"]="abiword"
+  ["org.blender.Blender"]="blender"
+  ["net.lutris.Lutris"]="lutris"
+  ["org.kde.kdenlive"]="kdenlive"
+  ["com.obsproject.Studio"]="obs-studio"
+  ["org.feichtmeier.Musicpod"]="musicpod"
+  ["sa.sy.bluerecorder"]="bluerecorder"
+  ["org.flameshot.Flameshot"]="flameshot"
+  ["com.usebottles.bottles"]="bottles"
+)
+
 FLATPAK_APPS=(
   "com.discordapp.Discord"
   "org.gimp.GIMP"
@@ -109,21 +236,23 @@ FLATPAK_APPS=(
   "com.usebottles.bottles"
 )
 
-for app in "${FLATPAK_APPS[@]}"; do
-  echo -e "${GRAY}Prüfe Installation: $app...${NC}"
-  if flatpak list | grep -q "$app"; then
-    echo -e "${GREEN}$app ist bereits installiert.${NC}"
+for app_id in "${FLATPAK_APPS[@]}"; do
+  app_name=${APP_MAP[$app_id]}
+  echo -e "${GRAY}Prüfe Installation: $app_name...${NC}"
+  
+  if ! is_app_installed "$app_name" "$app_id"; then
+    echo -e "${GRAY}Installiere $app_name als Flatpak...${NC}"
+    flatpak install -y flathub "$app_id"
   else
-    echo -e "${GRAY}Installiere $app...${NC}"
-    flatpak install -y flathub "$app"
+    echo -e "${YELLOW}Überspringe Installation von $app_name als Flatpak, da bereits installiert.${NC}"
   fi
 done
 
-# 6. Aufräumen
+# 7. Aufräumen
 echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
 rm -r /opt/scriptfiles/testarea-main 2>/dev/null
 rm /opt/main.zip 2>/dev/null
-#
+
 echo
 echo -e "${GREEN}Alle Aufgaben abgeschlossen!${NC}"
 echo
