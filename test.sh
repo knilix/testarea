@@ -1,12 +1,11 @@
 #!/bin/sh
-
 set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${GREEN}Dieses Skript installiert Nextcloud mit HTTPS (öffentlich + intern) und Sicherheitsfeatures auf Alpine Linux.${NC}"
+echo -e "${GREEN}Dieses Skript installiert Nextcloud mit HTTPS (öffentlich + intern) auf Alpine Linux.${NC}"
 printf "Möchten Sie fortfahren? (j/N): "
 read -r confirm
 if [ "$confirm" != "j" ]; then
@@ -35,6 +34,26 @@ apk upgrade
 apk add php php-fpm php-opcache php-gd php-mysqli php-zlib php-curl php-mbstring php-json php-xml php-dom php-ctype php-session php-iconv \
     php-pdo php-pdo_mysql php-pecl-redis php-intl php-posix php-fileinfo php-simplexml php-tokenizer php-xmlwriter php-xmlreader \
     mariadb mariadb-client redis nginx curl sudo unzip openssl php-cli php-phar php-zip php-pcntl socat acme.sh iptables
+
+# php-fpm manuell als OpenRC-Dienst einrichten
+if [ ! -f /etc/init.d/php-fpm ]; then
+cat << 'EOF' > /etc/init.d/php-fpm
+#!/sbin/openrc-run
+
+command=/usr/sbin/php-fpm
+command_args="-y /etc/php/php-fpm.conf --nodaemonize"
+pidfile=/run/php-fpm.pid
+name="PHP-FPM"
+description="PHP FastCGI Process Manager"
+
+depend() {
+    need net
+    use mysql
+    after firewall
+}
+EOF
+chmod +x /etc/init.d/php-fpm
+fi
 
 rc-update add mariadb default
 rc-update add redis default
