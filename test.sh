@@ -57,7 +57,7 @@ mysql -e "GRANT ALL PRIVILEGES ON ${NEXTCLOUD_DB}.* TO '${NEXTCLOUD_USER}'@'loca
 mysql -e "FLUSH PRIVILEGES;"
 
 rc-service redis start
-rc-service php-fpm7 start
+rc-service php-fpm start
 
 cd /var/www/localhost/htdocs || exit 1
 curl -o nextcloud.zip https://download.nextcloud.com/server/releases/latest.zip
