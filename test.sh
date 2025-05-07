@@ -42,8 +42,29 @@ info "Creating installation directory at $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
-# Check for required utilities
-for cmd in docker curl openssl; do
+# Check for required utilities and install if needed
+info "Checking and installing required dependencies..."
+
+# Check and install Docker if not present
+if ! command -v docker &> /dev/null; then
+    warn "Docker is not installed. Installing Docker..."
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sh get-docker.sh
+    
+    # Add current user to docker group
+    usermod -aG docker $USER
+    
+    # Verify Docker installation
+    if ! command -v docker &> /dev/null; then
+        error "Docker installation failed. Please install Docker manually and try again."
+    fi
+    info "Docker has been installed successfully."
+else
+    info "Docker is already installed."
+fi
+
+# Check for and install other required utilities
+for cmd in curl openssl; do
     if ! command -v $cmd &> /dev/null; then
         warn "$cmd is not installed. Installing..."
         apt-get update
@@ -53,9 +74,29 @@ done
 
 # Check if Docker Compose is installed
 if ! command -v docker compose &> /dev/null; then
-    warn "Docker Compose is not installed. Installing Docker Compose..."
-    apt-get update
-    apt-get install -y docker-compose-plugin
+    warn "Docker Compose is not available. Installing Docker Compose..."
+    
+    # For newer Docker versions, Compose is included as docker compose
+    if docker compose version &> /dev/null; then
+        info "Docker Compose plugin is already installed."
+    else
+        apt-get update
+        apt-get install -y docker-compose-plugin
+        
+        # Verify Docker Compose installation
+        if ! docker compose version &> /dev/null; then
+            warn "Docker Compose plugin installation might have failed. Trying alternative method..."
+            apt-get install -y docker-compose
+        fi
+    fi
+    
+    # Final verification
+    if ! (docker compose version &> /dev/null || command -v docker-compose &> /dev/null); then
+        error "Docker Compose installation failed. Please install Docker Compose manually and try again."
+    fi
+    info "Docker Compose has been installed successfully."
+else
+    info "Docker Compose is already installed."
 fi
 
 # Generate random passwords
