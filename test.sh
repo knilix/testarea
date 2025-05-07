@@ -3,6 +3,8 @@
 # Maintainer: @knilix
 # Version: 1.0.1
 #
+# Faulty: 403 Forbidden nginx
+#
 # Script to install Nextcloud with Nginx, MariaDB and Redis using Docker Compose
 # Compatible with Debian and Ubuntu systems
 # Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
