@@ -8,7 +8,7 @@
 # Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
 # -----------------------------------------------------------------------------------------------------------------------------
 # download and unzip: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/test.sh
-# execute (unique): cd /opt/scriptfiles/testarea-main && ./test.sh #
+# execute (unique): cd /opt/scriptfiles/testarea-main && ./test.sh
 # in case of problems: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 # -----------------------------------------------------------------------------------------------------------------------------
 set -e
