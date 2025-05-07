@@ -33,6 +33,24 @@ error() {
     exit 1
 }
 
+# Display introduction and ask for confirmation
+echo "============================================================="
+echo "               Nextcloud Docker Installer                     "
+echo "============================================================="
+echo ""
+echo "This script will install Nextcloud with Nginx, MariaDB, and Redis"
+echo "using Docker Compose on your Debian/Ubuntu system."
+echo ""
+echo "It will:"
+echo "  - Install Docker and Docker Compose if not already installed"
+echo "  - Set up a complete Nextcloud environment with all components"
+echo "  - Configure SSL for secure access"
+echo "  - Generate secure random passwords"
+echo "  - Provide a management script for maintenance"
+echo ""
+echo "Press Enter to continue or Ctrl+C to abort..."
+read -r
+
 # Check if script is run as root
 if [ "$(id -u)" -ne 0 ]; then
     error "This script must be run as root. Please use sudo or run as root."
@@ -112,24 +130,110 @@ DB_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
 NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
 NEXTCLOUD_ADMIN_USER="admin"
 
+# Get server IP address automatically
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
 # Get server domain/IP
 echo ""
-read -p "Enter your server domain or IP address (e.g., nextcloud.example.com or IP): " SERVER_DOMAIN
+read -p "Enter your server domain (or press Enter to use IP address $SERVER_IP): " SERVER_DOMAIN
 if [ -z "$SERVER_DOMAIN" ]; then
-    SERVER_DOMAIN=$(hostname -I | awk '{print $1}')
+    SERVER_DOMAIN="$SERVER_IP"
     info "Using IP address: $SERVER_DOMAIN"
+fi
+
+# Ask for email for Let's Encrypt (optional)
+echo ""
+read -p "Enter your email for Let's Encrypt certificate (optional, press Enter to use self-signed): " EMAIL
+USE_LETSENCRYPT=false
+if [ -n "$EMAIL" ]; then
+    # Check if the domain is an IP address
+    if [[ "$SERVER_DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        warn "Let's Encrypt requires a domain name, not an IP address. Reverting to self-signed certificates."
+    else
+        USE_LETSENCRYPT=true
+        info "Will use Let's Encrypt with email: $EMAIL"
+    fi
+else
+    info "Will use self-signed certificates."
 fi
 
 # Create SSL certificates directory
 mkdir -p "$INSTALL_DIR/ssl"
 
-# Generate self-signed SSL certificate
-info "Generating self-signed SSL certificate..."
-openssl req -x509 -nodes -days 3650 -newkey rsa:4096 \
-    -keyout "$INSTALL_DIR/ssl/nginx.key" \
-    -out "$INSTALL_DIR/ssl/nginx.crt" \
-    -subj "/CN=$SERVER_DOMAIN" \
-    -addext "subjectAltName=DNS:$SERVER_DOMAIN,IP:$(hostname -I | awk '{print $1}')"
+# Generate SSL certificates (self-signed or Let's Encrypt)
+if [ "$USE_LETSENCRYPT" = true ]; then
+    info "Setting up Let's Encrypt certificates..."
+    
+    # Install certbot if not present
+    if ! command -v certbot &> /dev/null; then
+        apt-get update
+        apt-get install -y certbot
+    fi
+    
+    # Create a temporary nginx config for certbot
+    mkdir -p "$INSTALL_DIR/letsencrypt"
+    mkdir -p "$INSTALL_DIR/letsencrypt-www"
+    
+    cat > "$INSTALL_DIR/nginx-certbot.conf" << EOF
+server {
+    listen 80;
+    server_name $SERVER_DOMAIN;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
+    
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+EOF
+
+    # Start a temporary nginx for certbot verification
+    docker run --name certbot-nginx -v "$INSTALL_DIR/nginx-certbot.conf:/etc/nginx/conf.d/default.conf:ro" \
+        -v "$INSTALL_DIR/letsencrypt-www:/var/www/letsencrypt" \
+        -p 80:80 -d nginx:alpine
+    
+    # Wait for nginx to start
+    sleep 5
+    
+    # Get certificate
+    certbot certonly --webroot -w "$INSTALL_DIR/letsencrypt-www" -d "$SERVER_DOMAIN" --email "$EMAIL" --agree-tos --non-interactive
+    
+    # Copy certificates
+    cp /etc/letsencrypt/live/$SERVER_DOMAIN/fullchain.pem "$INSTALL_DIR/ssl/nginx.crt"
+    cp /etc/letsencrypt/live/$SERVER_DOMAIN/privkey.pem "$INSTALL_DIR/ssl/nginx.key"
+    
+    # Stop and remove temporary nginx
+    docker stop certbot-nginx
+    docker rm certbot-nginx
+    
+    # Clean up temporary files
+    rm -f "$INSTALL_DIR/nginx-certbot.conf"
+    
+    # Create renewal hook
+    mkdir -p /etc/letsencrypt/renewal-hooks/post
+    cat > /etc/letsencrypt/renewal-hooks/post/nextcloud-copy.sh << EOF
+#!/bin/bash
+cp /etc/letsencrypt/live/$SERVER_DOMAIN/fullchain.pem "$INSTALL_DIR/ssl/nginx.crt"
+cp /etc/letsencrypt/live/$SERVER_DOMAIN/privkey.pem "$INSTALL_DIR/ssl/nginx.key"
+docker compose -f "$INSTALL_DIR/docker-compose.yml" restart web
+EOF
+    chmod +x /etc/letsencrypt/renewal-hooks/post/nextcloud-copy.sh
+    
+    # Add certbot renewal to crontab
+    (crontab -l 2>/dev/null || echo "") | grep -v "certbot renew" | { cat; echo "0 3 * * * certbot renew --quiet"; } | crontab -
+    
+    info "Let's Encrypt certificates have been set up and renewal configured."
+else
+    # Generate self-signed SSL certificate
+    info "Generating self-signed SSL certificate..."
+    openssl req -x509 -nodes -days 3650 -newkey rsa:4096 \
+        -keyout "$INSTALL_DIR/ssl/nginx.key" \
+        -out "$INSTALL_DIR/ssl/nginx.crt" \
+        -subj "/CN=$SERVER_DOMAIN" \
+        -addext "subjectAltName=DNS:$SERVER_DOMAIN,IP:$(hostname -I | awk '{print $1}')"
+fi
 
 # Set proper permissions for SSL files
 chmod 600 "$INSTALL_DIR/ssl/nginx.key"
@@ -145,7 +249,7 @@ mkdir -p "$INSTALL_DIR/nginx"
 mkdir -p "$INSTALL_DIR/php"
 cat > "$INSTALL_DIR/php/custom.ini" << EOF
 memory_limit = 512M
-upload_max_filesize = 500M
+upload_max_filesize = 50G
 post_max_size = 500M
 max_execution_time = 300
 date.timezone = Europe/Berlin
@@ -382,8 +486,6 @@ EOF
 
 # Create Docker Compose configuration file
 cat > "$INSTALL_DIR/docker-compose.yml" << EOF
-version: '3'
-
 services:
   db:
     image: mariadb:10.6
@@ -535,17 +637,35 @@ case "\$1" in
         fi
         cat "\$INSTALL_DIR/credentials.txt"
         ;;
+    ssl-status)
+        if [ -f "\$INSTALL_DIR/ssl/nginx.crt" ]; then
+            echo "SSL Certificate Information:"
+            openssl x509 -in "\$INSTALL_DIR/ssl/nginx.crt" -text -noout | grep -E 'Subject:|Issuer:|Not Before:|Not After :|DNS:|IP Address:'
+        else
+            echo "SSL certificate not found."
+        fi
+        ;;
+    renew-ssl)
+        if [ -f "/etc/letsencrypt/renewal-hooks/post/nextcloud-copy.sh" ]; then
+            echo "Renewing Let's Encrypt certificate..."
+            certbot renew
+        else
+            echo "Let's Encrypt certificate not found. This command only works with Let's Encrypt certificates."
+        fi
+        ;;
     *)
-        echo "Usage: \$0 {start|stop|restart|status|logs|update|backup|creds}"
+        echo "Usage: \$0 {start|stop|restart|status|logs|update|backup|creds|ssl-status|renew-ssl}"
         echo ""
-        echo "  start   - Start Nextcloud containers"
-        echo "  stop    - Stop Nextcloud containers"
-        echo "  restart - Restart Nextcloud containers"
-        echo "  status  - Show container status"
-        echo "  logs    - Show logs (optionally specify container name)"
-        echo "  update  - Update and restart containers"
-        echo "  backup  - Backup Nextcloud (optionally specify backup directory)"
-        echo "  creds   - Show stored credentials (requires root)"
+        echo "  start      - Start Nextcloud containers"
+        echo "  stop       - Stop Nextcloud containers"
+        echo "  restart    - Restart Nextcloud containers"
+        echo "  status     - Show container status"
+        echo "  logs       - Show logs (optionally specify container name)"
+        echo "  update     - Update and restart containers"
+        echo "  backup     - Backup Nextcloud (optionally specify backup directory)"
+        echo "  creds      - Show stored credentials (requires root)"
+        echo "  ssl-status - Show SSL certificate information"
+        echo "  renew-ssl  - Force renewal of Let's Encrypt certificate"
         exit 1
         ;;
 esac
@@ -636,8 +756,14 @@ echo ""
 echo "The management script has been installed. Use it with:"
 echo "  nextcloud-manager {start|stop|restart|status|logs|update|backup|creds}"
 echo ""
-warn "Since you're using a self-signed certificate, your browser will show a security warning."
-warn "You can either accept this warning or replace the certificates with valid ones."
+
+if [ "$USE_LETSENCRYPT" = true ]; then
+    info "Let's Encrypt SSL certificates are installed and will auto-renew."
+else
+    warn "Since you're using a self-signed certificate, your browser will show a security warning."
+    warn "You can either accept this warning or replace the certificates with valid ones."
+fi
+
 echo "=================================================================="
 
 # Clean up any temporary files
