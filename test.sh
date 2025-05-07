@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Maintainer: @knilix
-# Version: 1.0
+# Version: 1.0.1
 #
 # Script to install Nextcloud with Nginx, MariaDB and Redis using Docker Compose
 # Compatible with Debian and Ubuntu systems
