@@ -34,6 +34,7 @@ error() {
 }
 
 # Display introduction and ask for confirmation
+clear
 echo "============================================================="
 echo "               Nextcloud Docker Installer                     "
 echo "============================================================="
