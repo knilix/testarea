@@ -58,7 +58,7 @@ DB_PASS="$(openssl rand -hex 12)"
 DB_NAME="nextcloud"
 NEXTCLOUD_ADMIN="admin"
 NEXTCLOUD_PASS="$(openssl rand -hex 12)"
-DOMAIN_NAME="localhost"
+DOMAIN_NAME=$(hostname -I | awk '{print $1}')  # System-IP verwenden, alternativ: setze manuell z.B. DOMAIN_NAME="deine-domain.de"
 EMAIL="admin@example.com"
 
 SSL_DIR="$INSTALL_DIR/certs"
