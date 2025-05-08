@@ -50,7 +50,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Create directories
-mkdir -p /opt/nextcloud-docker/{nginx,db,redis,nextcloud_data,ssl,certs}
+mkdir -p /opt/nextcloud-docker/{nginx,db,redis,nextcloud_data,ssl,certs,logs}
 
 # Generate self-signed certificate
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -112,12 +112,13 @@ services:
       - /opt/nextcloud-docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /opt/nextcloud-docker/ssl:/etc/nginx/ssl:ro
       - /opt/nextcloud-docker/nextcloud_data:/var/www/html:ro
+      - /opt/nextcloud-docker/logs:/var/log/nginx
     depends_on:
       - nextcloud
     restart: unless-stopped
 EOF
 
-# Create nginx configuration
+# Create nginx configuration with improved settings
 cat > /opt/nextcloud-docker/nginx/nginx.conf << EOF
 user nginx;
 worker_processes auto;
@@ -133,6 +134,9 @@ http {
     default_type application/octet-stream;
     sendfile on;
     keepalive_timeout 65;
+    proxy_buffer_size 128k;
+    proxy_buffers 4 256k;
+    proxy_busy_buffers_size 256k;
 
     server {
         listen 80;
@@ -152,18 +156,24 @@ http {
         root /var/www/html;
         index index.php index.html;
 
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log warn;
+
         location / {
             proxy_pass http://nextcloud;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_read_timeout 3600;
+            proxy_connect_timeout 3600;
         }
 
         location ~ \.php$ {
             fastcgi_pass nextcloud:9000;
             fastcgi_index index.php;
             fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            fastcgi_read_timeout 3600;
             include fastcgi_params;
         }
     }
@@ -207,7 +217,27 @@ cd /opt/nextcloud-docker
 docker compose up -d
 
 # Wait for Nextcloud to be ready
+echo "Waiting for services to initialize..."
 sleep 30
+
+# Check if containers are running
+if ! docker ps | grep -q nextcloud_nginx; then
+    echo "Error: Nginx container is not running. Checking logs..."
+    docker logs nextcloud_nginx
+    exit 1
+fi
+if ! docker ps | grep -q nextcloud; then
+    echo "Error: Nextcloud container is not running. Checking logs..."
+    docker logs nextcloud
+    exit 1
+fi
+
+# Verify PHP-FPM is running in Nextcloud container
+if ! docker exec nextcloud ps aux | grep -q php-fpm; then
+    echo "Error: PHP-FPM is not running in Nextcloud container. Checking logs..."
+    docker logs nextcloud
+    exit 1
+fi
 
 # Modify config.php
 CONFIG_FILE="/opt/nextcloud-docker/nextcloud_data/config/config.php"
@@ -252,6 +282,8 @@ echo "Access Nextcloud at: https://$IP_ADDRESS"
 echo "Admin Username: admin"
 echo "Admin Password: $NEXTCLOUD_ADMIN_PASSWORD"
 echo "Database credentials are stored in /opt/nextcloud-docker/credentials.txt (root only)"
+echo "Nginx logs are stored in /opt/nextcloud-docker/logs/"
 echo "================================="
 echo "Note: You may need to accept the self-signed certificate in your browser"
+echo "If you encounter a 502 Bad Gateway error, check logs in /opt/nextcloud-docker/logs/error.log"
 echo "Please log out and log back in for Docker group changes to take effect"
