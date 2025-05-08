@@ -22,12 +22,12 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-# ───── Docker- und Docker-Compose-Check ─────
-if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
-  echo "Docker oder Docker Compose ist nicht installiert. Bitte installieren Sie Docker und Docker Compose und führen Sie das Skript erneut aus."
+# ───── Docker Compose-Check ─────
+if ! docker compose version &> /dev/null; then
+  echo "Docker Compose ist nicht installiert. Bitte installieren Sie Docker Compose und führen Sie das Skript erneut aus."
   exit 1
 else
-  echo "Docker und Docker Compose sind installiert."
+  echo "Docker Compose ist installiert."
 fi
 
 # ───── Erstellen des Verzeichnisses und Zertifikats ─────
@@ -151,84 +151,4 @@ server {
 }
 EOF
 
-# ───── Docker-Compose starten ─────
-echo "Starte Docker-Container..."
-docker-compose up -d
-
-# ───── Ausgabe der Zugangsdaten ─────
-echo "Die Zugangsdaten für Nextcloud wurden generiert und sind in der .env-Datei gespeichert."
-echo "Zugangsdaten:"
-echo "  MySQL Root Passwort: $MYSQL_ROOT_PASSWORD"
-echo "  MySQL Benutzer: $MYSQL_USER"
-echo "  MySQL Passwort: $MYSQL_PASSWORD"
-echo "  MySQL Datenbank: $MYSQL_DATABASE"
-echo "  Nextcloud Admin Benutzer: $NEXTCLOUD_ADMIN_USER"
-echo "  Nextcloud Admin Passwort: $NEXTCLOUD_ADMIN_PASSWORD"
-
-# ───── Konfiguration für Nextcloud und PHP anpassen ─────
-echo "Konfiguriere PHP-Einstellungen für Nextcloud..."
-
-# PHP-Konfiguration anpassen
-PHP_INI=$(docker exec $(docker ps -qf "ancestor=nextcloud") php --ini | grep "Loaded Configuration" | awk '{print $4}')
-
-# PHP-Datei für Nextcloud anpassen
-if [ -n "$PHP_INI" ]; then
-  echo "Setze PHP-Einstellungen für Nextcloud..."
-  sed -i "s/memory_limit = .*/memory_limit = 512M/" "$PHP_INI"
-  sed -i "s/upload_max_filesize = .*/upload_max_filesize = 20G/" "$PHP_INI"
-  sed -i "s/post_max_size = .*/post_max_size = 500M/" "$PHP_INI"
-  sed -i "s/max_execution_time = .*/max_execution_time = 300/" "$PHP_INI"
-  sed -i "s/date.timezone = .*/date.timezone = Europe\/Berlin/" "$PHP_INI"
-  sed -i "s/opcache.enable = .*/opcache.enable = 1/" "$PHP_INI"
-  sed -i "s/opcache.interned_strings_buffer = .*/opcache.interned_strings_buffer = 32/" "$PHP_INI"
-  sed -i "s/opcache.max_accelerated_files = .*/opcache.max_accelerated_files = 10000/" "$PHP_INI"
-  sed -i "s/opcache.memory_consumption = .*/opcache.memory_consumption = 128/" "$PHP_INI"
-  sed -i "s/opcache.save_comments = .*/opcache.save_comments = 1/" "$PHP_INI"
-  sed -i "s/opcache.revalidate_freq = .*/opcache.revalidate_freq = 1/" "$PHP_INI"
-  echo "PHP-Einstellungen wurden angepasst."
-else
-  echo "Die PHP-Konfiguration für Nextcloud konnte nicht gefunden werden!"
-  exit 1
-fi
-
-# ───── config.php anpassen ─────
-echo "Passe config.php von Nextcloud an..."
-
-CONFIG_FILE="./nextcloud_data/config/config.php"
-if [ -f "$CONFIG_FILE" ]; then
-  TMP_FILE=$(mktemp)
-  awk '
-    /^\);$/ {
-      print "  '\''default_phone_region'\'' => '\''DE'\'',";
-      print "  '\''enable_previews'\'' => true,";
-      print "  '\''enabledPreviewProviders'\'' => array (";
-      print "    0 => '\''OC\\\\\\\\Preview\\\\\\\\PNG'\'',";
-      print "    1 => '\''OC\\\\\\\\Preview\\\\\\\\JPEG'\'',";
-      print "    2 => '\''OC\\\\\\\\Preview\\\\\\\\GIF'\'',";
-      print "    3 => '\''OC\\\\\\\\Preview\\\\\\\\BMP'\'',";
-      print "    4 => '\''OC\\\\\\\\Preview\\\\\\\\XBitmap'\'',";
-      print "    5 => '\''OC\\\\\\\\Preview\\\\\\\\MP3'\'',";
-      print "    6 => '\''OC\\\\\\\\Preview\\\\\\\\TXT'\'',";
-      print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
-      print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
-      print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
-      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
-      print "  ),";
-      print "  '\''maintenance_window_start'\'' => 1,";
-    }
-    { print }
-  ' "$CONFIG_FILE" > "$TMP_FILE"
-  cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-  cp "$TMP_FILE" "$CONFIG_FILE"
-  rm "$TMP_FILE"
-else
-  echo "config.php konnte nicht gefunden werden!"
-  exit 1
-fi
-
-# ───── Bereinigung ─────
-echo "Bereinige temporäre Dateien..."
-rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
-
-echo "Installation und Konfiguration abgeschlossen!"
-
+#
