@@ -14,127 +14,162 @@
 # in case of problems: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 # -----------------------------------------------------------------------------------------------------------------------------
 # Exit on error
+
+#!/bin/bash
+
 set -e
 
-### Variablen ###
-NEXTCLOUD_DIR="/opt/nextcloud-docker"
-DB_PASSWORD=$(openssl rand -base64 32)
-NEXTCLOUD_ADMIN_USER="admin"
-NEXTCLOUD_ADMIN_PASSWORD=$(openssl rand -base64 32)
-CREDENTIAL_FILE="/root/nextcloud_credentials.txt"
-CERT_DIR="$NEXTCLOUD_DIR/certs"
-CONFIG_PHP="$NEXTCLOUD_DIR/nextcloud_data/config/config.php"
-SERVER_IP=$(hostname -I | awk '{print $1}')
-
-### OS-Erkennung ###
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-else
-    echo "Betriebssystem nicht erkannt."
-    exit 1
+# ───── OS-Check ─────
+if ! grep -qiE 'debian|ubuntu' /etc/os-release; then
+  echo "Dieses Skript unterstützt nur Debian oder Ubuntu."
+  exit 1
 fi
 
-if [ "$OS" != "debian" ] && [ "$OS" != "ubuntu" ]; then
-    echo "Dieses Skript unterstützt nur Debian und Ubuntu."
-    exit 1
+# ───── Root-Check ─────
+if [[ "$EUID" -ne 0 ]]; then
+  echo "Bitte führe dieses Skript als root aus (sudo)."
+  exit 1
 fi
 
-### Notwendige Pakete installieren ###
-echo "Benötigte Pakete werden installiert..."
+# ───── Abhängigkeiten installieren ─────
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y curl openssl gawk coreutils
+apt-get install -y curl openssl awk docker.io
 
-### Docker installieren, falls nicht vorhanden ###
-if ! command -v docker &> /dev/null; then
-    echo "Docker wird installiert..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    newgrp docker
-    usermod -aG docker "$USER"
-fi
-
-### Docker Compose CLI installieren ###
+# ───── Docker Compose installieren ─────
 if ! command -v docker compose &> /dev/null; then
-    echo "Docker Compose CLI wird eingerichtet (ab Docker 20.10+ integriert)..."
-    DOCKER_CONFIG_PATH="/usr/local/lib/docker/cli-plugins"
-    mkdir -p "$DOCKER_CONFIG_PATH"
-    curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) \
-        -o "$DOCKER_CONFIG_PATH/docker-compose"
-    chmod +x "$DOCKER_CONFIG_PATH/docker-compose"
-    export PATH=$PATH:$DOCKER_CONFIG_PATH
+  curl -fsSL https://get.docker.com -o get-docker.sh
+  sh get-docker.sh
+  usermod -aG docker "$SUDO_USER"
+  newgrp docker
 fi
 
-### Verzeichnisstruktur ###
-mkdir -p "$NEXTCLOUD_DIR"
-mkdir -p "$CERT_DIR"
+# ───── Verzeichnisse vorbereiten ─────
+mkdir -p /opt/nextcloud-docker/nginx/ssl
+cd /opt/nextcloud-docker
 
-### Selbstsigniertes Zertifikat erstellen ###
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout "$CERT_DIR/selfsigned.key" \
-  -out "$CERT_DIR/selfsigned.crt" \
-  -subj "/C=DE/ST=Berlin/L=Berlin/O=Nextcloud/CN=$SERVER_IP"
+# ───── Passwörter generieren und speichern ─────
+DB_ROOT_PASSWORD=$(openssl rand -base64 32)
+MYSQL_PASSWORD=$(openssl rand -base64 32)
+NC_ADMIN_USER="admin"
+NC_ADMIN_PASS=$(openssl rand -base64 32)
 
-### Docker Compose Datei ###
-cat > "$NEXTCLOUD_DIR/docker-compose.yml" <<EOF
-version: '3'
+CRED_FILE="/root/nextcloud-credentials.txt"
+cat <<EOF > "$CRED_FILE"
+Datenbank Root Passwort: $DB_ROOT_PASSWORD
+Nextcloud DB Benutzer: nextcloud
+Nextcloud DB Passwort: $MYSQL_PASSWORD
+Nextcloud Admin Benutzer: $NC_ADMIN_USER
+Nextcloud Admin Passwort: $NC_ADMIN_PASS
+Zugriff: https://$(hostname -I | awk '{print $1}')
+EOF
+chmod 600 "$CRED_FILE"
 
+# ───── .env-Datei erstellen ─────
+cat <<EOF > .env
+DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD
+MYSQL_PASSWORD=$MYSQL_PASSWORD
+NC_ADMIN_USER=$NC_ADMIN_USER
+NC_ADMIN_PASS=$NC_ADMIN_PASS
+EOF
+
+# ───── Selbstsigniertes Zertifikat ─────
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout nginx/ssl/selfsigned.key \
+  -out nginx/ssl/selfsigned.crt \
+  -days 365 \
+  -subj "/CN=$(hostname -I | awk '{print $1}')"
+
+# ───── docker-compose.yml ─────
+cat <<'EOF' > docker-compose.yml
 services:
-  db:
-    image: mariadb
-    restart: always
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud_app
+    restart: unless-stopped
     volumes:
-      - db:/var/lib/mysql
+      - nextcloud_data:/var/www/html
+      - ./nginx/ssl:/etc/ssl/nginx:ro
     environment:
-      MYSQL_ROOT_PASSWORD=$DB_PASSWORD
-      MYSQL_DATABASE=nextcloud
-      MYSQL_USER=nextcloud
-      MYSQL_PASSWORD=$DB_PASSWORD
-
-  redis:
-    image: redis:alpine
-    restart: always
-
-  app:
-    image: nextcloud
-    ports:
-      - 443:443
-    volumes:
-      - nextcloud:/var/www/html
-      - $CERT_DIR:/certs
-    environment:
-      MYSQL_PASSWORD: $DB_PASSWORD
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
       MYSQL_DATABASE: nextcloud
       MYSQL_USER: nextcloud
       MYSQL_HOST: db
-      NEXTCLOUD_ADMIN_USER: $NEXTCLOUD_ADMIN_USER
-      NEXTCLOUD_ADMIN_PASSWORD: $NEXTCLOUD_ADMIN_PASSWORD
       REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: "${NC_ADMIN_USER}"
+      NEXTCLOUD_ADMIN_PASSWORD: "${NC_ADMIN_PASS}"
     depends_on:
       - db
       - redis
-    restart: always
-    command: >
-      sh -c "apache2-foreground"
+
+  db:
+    image: mariadb:10.11
+    container_name: nextcloud_db
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+
+  redis:
+    image: redis:alpine
+    container_name: nextcloud_redis
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: nextcloud_nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/ssl/nginx:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nextcloud_data:/var/www/html:ro
+    depends_on:
+      - nextcloud
 
 volumes:
-  db:
-  nextcloud:
+  nextcloud_data:
+  db_data:
 EOF
 
-### Container starten ###
-cd "$NEXTCLOUD_DIR"
+# ───── nginx.conf ─────
+cat <<'EOF' > nginx/nginx.conf
+events {}
+http {
+  server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/ssl/nginx/selfsigned.crt;
+    ssl_certificate_key /etc/ssl/nginx/selfsigned.key;
+
+    location / {
+      proxy_pass http://nextcloud:80;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto https;
+    }
+  }
+}
+EOF
+
+# ───── Docker Compose starten ─────
 docker compose up -d
 
-### Warte auf Nextcloud Setup ###
-echo "Warte auf Nextcloud-Initialisierung..."
-sleep 60
+# ───── Warten, bis Nextcloud bereit ist ─────
+echo "Warte auf Nextcloud Initialisierung..."
+sleep 30
 
-### PHP Konfiguration anpassen ###
-CONTAINER_ID=$(docker ps -qf "ancestor=nextcloud")
-PHP_INI=$(docker exec "$CONTAINER_ID" php --ini | grep "Loaded Configuration" | awk '{print $4}')
+# ───── PHP-Konfiguration in Container anpassen ─────
+CONTAINER_ID=$(docker ps -qf "name=nextcloud_app")
+PHP_INI=$(docker exec "$CONTAINER_ID" php --ini | awk -F': ' '/Loaded Configuration/{print $2}')
 
-docker exec -i "$CONTAINER_ID" bash -c "cat >> '$PHP_INI'" <<'EOF'
+docker exec -i "$CONTAINER_ID" bash -c "cat >> '$PHP_INI'" <<'EOCONFIG'
 memory_limit = 512M
 upload_max_filesize = 20G
 post_max_size = 500M
@@ -146,18 +181,15 @@ opcache.max_accelerated_files=10000
 opcache.memory_consumption=128
 opcache.save_comments=1
 opcache.revalidate_freq=1
-EOF
+EOCONFIG
 
-
-### Config.php erweitern ###
-if [ -f "$CONFIG_PHP" ]; then
+# ───── config.php erweitern ─────
+CONFIG_FILE="/opt/nextcloud-docker/nextcloud_data/config/config.php"
+if [ -f "$CONFIG_FILE" ]; then
   TMP_FILE=$(mktemp)
-  awk -v ip="$SERVER_IP" '
+  awk '
     /^\);$/ {
-      print "  '\''trusted_domains'\'' => array (";
-      print "    0 => '\''localhost'\'',";
-      print "    1 => '\''" ip "'\'',";
-      print "  ),";
+      print "  '\''trusted_domains'\'' => array ( 0 => '\''" ENVIRON["IP"] "'\'', ),";
       print "  '\''default_phone_region'\'' => '\''DE'\'',";
       print "  '\''enable_previews'\'' => true,";
       print "  '\''enabledPreviewProviders'\'' => array (";
@@ -176,32 +208,15 @@ if [ -f "$CONFIG_PHP" ]; then
       print "  '\''maintenance_window_start'\'' => 1,";
     }
     { print }
-  ' "$CONFIG_PHP" > "$TMP_FILE"
-  cp "$CONFIG_PHP" "${CONFIG_PHP}.bak"
-  cp "$TMP_FILE" "$CONFIG_PHP"
-  rm "$TMP_FILE"
+  ' IP="$(hostname -I | awk '{print $1}')" "$CONFIG_FILE" > "$TMP_FILE"
+  cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+  mv "$TMP_FILE" "$CONFIG_FILE"
 fi
 
-### Zugangsdaten speichern ###
-cat > "$CREDENTIAL_FILE" <<EOF
-Nextcloud-Admin Zugang:
-URL: https://$SERVER_IP
-Benutzer: $NEXTCLOUD_ADMIN_USER
-Passwort: $NEXTCLOUD_ADMIN_PASSWORD
+# ───── Ausgabe ─────
+echo "Installation abgeschlossen."
+echo "Zugangsdaten (auch gespeichert in $CRED_FILE):"
+cat "$CRED_FILE"
 
-MariaDB:
-Benutzer: nextcloud
-Passwort: $DB_PASSWORD
-EOF
-chmod 600 "$CREDENTIAL_FILE"
-
-### Ausgabe ###
-echo "Installation abgeschlossen!"
-echo "Zugang zur Nextcloud über: https://$SERVER_IP"
-echo "Admin Benutzer: $NEXTCLOUD_ADMIN_USER"
-echo "Admin Passwort: $NEXTCLOUD_ADMIN_PASSWORD"
-echo "MySQL Passwort: $DB_PASSWORD"
-echo "Zugangsdaten gespeichert unter: $CREDENTIAL_FILE"
-
-### Bereinigung ###
+# ───── Bereinigung ─────
 rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
