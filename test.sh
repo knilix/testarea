@@ -50,7 +50,10 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Create directories
-mkdir -p /opt/nextcloud-docker/{nginx,db,redis,nextcloud_data,ssl,certs,logs}
+mkdir -p /opt/nextcloud-docker/{nginx,db,redis,nextcloud_data,ssl,php-config,logs}
+
+# Set correct ownership for nextcloud_data
+chown -R 33:33 /opt/nextcloud-docker/nextcloud_data
 
 # Generate self-signed certificate
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -87,7 +90,7 @@ services:
     container_name: nextcloud
     volumes:
       - /opt/nextcloud-docker/nextcloud_data:/var/www/html
-      - /opt/nextcloud-docker/certs:/var/www/html/certs
+      - /opt/nextcloud-docker/php-config/custom.ini:/usr/local/etc/php/conf.d/custom.ini
     environment:
       - MYSQL_HOST=db
       - MYSQL_DATABASE=nextcloud
@@ -118,7 +121,7 @@ services:
     restart: unless-stopped
 EOF
 
-# Create nginx configuration with improved settings
+# Create nginx configuration
 cat > /opt/nextcloud-docker/nginx/nginx.conf << EOF
 user nginx;
 worker_processes auto;
@@ -181,7 +184,7 @@ http {
 EOF
 
 # Create custom php.ini
-cat > /opt/nextcloud-docker/certs/custom.ini << EOF
+cat > /opt/nextcloud-docker/php-config/custom.ini << EOF
 memory_limit = 512M
 upload_max_filesize = 20G
 post_max_size = 500M
@@ -218,7 +221,7 @@ docker compose up -d
 
 # Wait for Nextcloud to be ready
 echo "Waiting for services to initialize..."
-sleep 30
+sleep 60
 
 # Check if containers are running
 if ! docker ps | grep -q nextcloud_nginx; then
@@ -235,6 +238,13 @@ fi
 # Verify PHP-FPM is running in Nextcloud container
 if ! docker exec nextcloud ps aux | grep -q php-fpm; then
     echo "Error: PHP-FPM is not running in Nextcloud container. Checking logs..."
+    docker logs nextcloud
+    exit 1
+fi
+
+# Check if Nextcloud setup is complete
+if ! docker exec nextcloud occ status | grep -q "installed: true"; then
+    echo "Error: Nextcloud setup is not complete. Checking logs..."
     docker logs nextcloud
     exit 1
 fi
