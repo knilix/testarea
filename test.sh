@@ -35,6 +35,42 @@ fi
 apt-get update
 apt-get install -y curl openssl gawk docker.io
 
+# ───── Docker installieren, falls nicht vorhanden ─────
+if ! command -v docker &> /dev/null; then
+  echo "Docker ist nicht installiert. Installiere Docker..."
+
+  # Docker-Installationsscript herunterladen und ausführen
+  curl -fsSL https://get.docker.com -o get-docker.sh
+  sudo sh get-docker.sh
+
+  # Docker-Gruppe für den aktuellen Benutzer anlegen und Benutzer hinzufügen
+  sudo newgrp docker
+  sudo usermod -aG docker $USER
+else
+  echo "Docker ist bereits installiert."
+fi
+
+# ───── Docker Compose installieren, falls nicht vorhanden ─────
+if ! command -v docker-compose &> /dev/null; then
+  echo "Docker Compose ist nicht installiert. Installiere Docker Compose..."
+
+  # Die neueste Version von Docker Compose installieren
+  curl -L "https://github.com/docker/compose/releases/download/v2.17.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  chmod +x /usr/local/bin/docker-compose
+else
+  echo "Docker Compose ist bereits installiert."
+fi
+
+# ───── Docker-Dienst starten und aktivieren ─────
+echo "Starte Docker-Dienst..."
+systemctl start docker
+systemctl enable docker
+
+# ───── Docker-Dienststatus prüfen ─────
+systemctl status docker
+
+echo "Docker und Docker Compose wurden erfolgreich installiert!"
+
 # ───── Docker Compose installieren ─────
 if ! command -v docker compose &> /dev/null; then
   curl -fsSL https://get.docker.com -o get-docker.sh
