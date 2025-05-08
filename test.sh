@@ -131,19 +131,23 @@ echo "Warte auf Nextcloud-Initialisierung..."
 sleep 60
 
 ### PHP Konfiguration anpassen ###
-PHP_INI=$(docker exec $(docker ps -qf "ancestor=nextcloud") php --ini | grep "Loaded Configuration" | awk '{print $4}')
-docker exec $(docker ps -qf "ancestor=nextcloud") bash -c "echo '\
-memory_limit = 512M\n\
-upload_max_filesize = 20G\n\
-post_max_size = 500M\n\
-max_execution_time = 300\n\
-date.timezone = Europe/Berlin\n\
-opcache.enable=1\n\
-opcache.interned_strings_buffer=32\n\
-opcache.max_accelerated_files=10000\n\
-opcache.memory_consumption=128\n\
-opcache.save_comments=1\n\
-opcache.revalidate_freq=1' >> $PHP_INI"
+CONTAINER_ID=$(docker ps -qf "ancestor=nextcloud")
+PHP_INI=$(docker exec "$CONTAINER_ID" php --ini | grep "Loaded Configuration" | awk '{print $4}')
+
+docker exec -i "$CONTAINER_ID" bash -c "cat >> '$PHP_INI'" <<'EOF'
+memory_limit = 512M
+upload_max_filesize = 20G
+post_max_size = 500M
+max_execution_time = 300
+date.timezone = Europe/Berlin
+opcache.enable=1
+opcache.interned_strings_buffer=32
+opcache.max_accelerated_files=10000
+opcache.memory_consumption=128
+opcache.save_comments=1
+opcache.revalidate_freq=1
+EOF
+
 
 ### Config.php erweitern ###
 if [ -f "$CONFIG_PHP" ]; then
