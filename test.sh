@@ -13,7 +13,6 @@
 # execute (unique): cd /opt/scriptfiles/testarea-main && ./test.sh
 # in case of problems: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 # -----------------------------------------------------------------------------------------------------------------------------
-
 set -e
 
 # Farbcodierung für die Ausgabe
@@ -305,4 +304,10 @@ echo "Nextcloud Admin Benutzername: admin"
 echo "Nextcloud Admin Passwort: ${NEXTCLOUD_ADMIN_PASSWORD}"
 echo ""
 echo "MariaDB Root Passwort: ${DB_ROOT_PASSWORD}"
-echo "MariaDB Benutzer
+echo "MariaDB Benutzer: nextcloud"
+echo "MariaDB Passwort: nextcloud"
+echo "MariaDB Datenbank: nextcloud"
+echo "--------------------------------------------------"
+echo ""
+warn "Beachte:"
+warn "Das verwendete SSL-Zertifikat ist selbstsign
