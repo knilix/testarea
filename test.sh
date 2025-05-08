@@ -195,6 +195,13 @@ if [ -f "$CONFIG_FILE" ]; then
   rm "$TMP_FILE"
 fi
 
+# Hinzufügen der Domain zur trusted_domains in config.php
+CONFIG_FILE="/opt/nextcloud-docker/nextcloud_data/config/config.php"
+DOMAIN_NAME="meine-domain.de"  # oder verwende die System-IP
+if [ -f "$CONFIG_FILE" ]; then
+  sed -i "/'trusted_domains' =>/a \ \ \ \ \ 1 => '$DOMAIN_NAME'," "$CONFIG_FILE"
+fi
+
 # Zugangsdaten-Datei nur für root lesbar
 CREDENTIALS_FILE="$INSTALL_DIR/credentials.txt"
 cat > "$CREDENTIALS_FILE" <<EOF
