@@ -14,8 +14,6 @@
 # in case of problems: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 # -----------------------------------------------------------------------------------------------------------------------------
 # Exit on error
-#!/bin/bash
-
 set -e
 
 # ───── Root-Check ─────
