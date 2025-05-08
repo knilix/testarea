@@ -50,13 +50,17 @@ else
   echo "Docker ist bereits installiert."
 fi
 
-# ───── Docker Compose installieren, falls nicht vorhanden ─────
+# ───── Docker Compose überprüfen (wird bereits mit Docker installiert) ─────
 if ! command -v docker-compose &> /dev/null; then
-  echo "Docker Compose ist nicht installiert. Installiere Docker Compose..."
+  echo "Docker Compose wurde nicht gefunden. Installiere Docker Compose..."
 
   # Die neueste Version von Docker Compose installieren
-  curl -L "https://github.com/docker/compose/releases/download/v2.17.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-  chmod +x /usr/local/bin/docker-compose
+  curl -fsSL https://get.docker.com -o get-docker.sh
+  sudo sh get-docker.sh
+
+  # Docker-Gruppe für den aktuellen Benutzer anlegen und Benutzer hinzufügen
+  sudo newgrp docker
+  sudo usermod -aG docker $USER
 else
   echo "Docker Compose ist bereits installiert."
 fi
@@ -70,6 +74,7 @@ systemctl enable docker
 systemctl status docker
 
 echo "Docker und Docker Compose wurden erfolgreich installiert!"
+
 
 # ───── Docker Compose installieren ─────
 if ! command -v docker compose &> /dev/null; then
