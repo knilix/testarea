@@ -33,7 +33,7 @@ fi
 
 # ───── Abhängigkeiten installieren ─────
 apt-get update
-apt-get install -y curl openssl awk docker.io
+apt-get install -y curl openssl gawk docker.io
 
 # ───── Docker Compose installieren ─────
 if ! command -v docker compose &> /dev/null; then
