@@ -75,15 +75,6 @@ systemctl status docker
 
 echo "Docker und Docker Compose wurden erfolgreich installiert!"
 
-
-# ───── Docker Compose installieren ─────
-if ! command -v docker compose &> /dev/null; then
-  curl -fsSL https://get.docker.com -o get-docker.sh
-  sh get-docker.sh
-  usermod -aG docker "$SUDO_USER"
-  newgrp docker
-fi
-
 # ───── Verzeichnisse vorbereiten ─────
 mkdir -p /opt/nextcloud-docker/nginx/ssl
 cd /opt/nextcloud-docker
