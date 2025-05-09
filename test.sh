@@ -98,6 +98,7 @@ else
   php-curl php-mbstring php-zip php-xml php-gd php-mysql \
   php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra \
   php-gmp ffmpeg ghostscript
+fi
 
 # 9. Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
@@ -379,7 +380,7 @@ fi
 # 20. Letzter Feinschliff
 sudo -u ${APACHE_USER} php /var/www/nextcloud/occ maintenance:mode --on
 sudo -u ${APACHE_USER} php occ maintenance:repair --include-expensive
-sudo if [[ "$OS_TYPE" == "Fedora" ]]; then
+if [[ "$OS_TYPE" == "Fedora" ]]; then
   systemctl enable --now httpd
   systemctl restart php-fpm
 else
