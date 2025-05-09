@@ -10,10 +10,9 @@
 # Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
 # Mit MariaDB und Redis Cache
 # -----------------------------------------------------------------------------
-# 
 # Nextcloud Installation Script für Ubuntu-Server
-# Dieses Script installiert snapd, Nextcloud, konfiguriert einen Admin-Benutzer
-# und behebt das Header-Transport-Problem
+# Dieses Script installiert snapd, Nextcloud, konfiguriert einen Admin-Benutzer,
+# behebt das Header-Transport-Problem und richtet den Zugriff korrekt ein
 
 # Funktion für formatierte Ausgaben
 print_message() {
@@ -106,7 +105,8 @@ cat > "$CREDENTIALS_FILE" << EOF
 Nextcloud Installation Credentials
 =================================
 Datum: $(date '+%Y-%m-%d %H:%M:%S')
-Server-URL: https://$IP_ADDRESS
+HTTP-URL: http://$IP_ADDRESS
+HTTPS-URL: https://$IP_ADDRESS (Selbstsigniertes Zertifikat - Browserwarnung bestätigen)
 Admin-Benutzer: $ADMIN_USER
 Admin-Passwort: $ADMIN_PASSWORD
 =================================
@@ -116,17 +116,58 @@ EOF
 # Rechte für credentials-Datei einschränken
 chmod 600 "$CREDENTIALS_FILE"
 
+# Prüfe, ob Nextcloud erreichbar ist
+print_message "Prüfe Zugriff auf Nextcloud..."
+if command -v curl &> /dev/null; then
+    # Warte ein wenig, bis der Server vollständig gestartet ist
+    sleep 15
+    if curl -s -k -o /dev/null -w "%{http_code}" "http://$IP_ADDRESS" | grep -q "200\|301\|302"; then
+        HTTP_AVAILABLE=true
+        print_message "HTTP-Zugriff funktioniert!"
+    else
+        HTTP_AVAILABLE=false
+        print_message "Warnung: HTTP-Zugriff scheint nicht zu funktionieren."
+    fi
+    
+    if curl -s -k -o /dev/null -w "%{http_code}" "https://$IP_ADDRESS" | grep -q "200\|301\|302"; then
+        HTTPS_AVAILABLE=true
+        print_message "HTTPS-Zugriff funktioniert!"
+    else
+        HTTPS_AVAILABLE=false
+        print_message "Warnung: HTTPS-Zugriff scheint nicht zu funktionieren (selbstsigniertes Zertifikat könnte Warnungen verursachen)."
+    fi
+else
+    HTTP_AVAILABLE=false
+    HTTPS_AVAILABLE=false
+    print_message "Warnung: curl ist nicht installiert, kann Zugriff nicht überprüfen."
+fi
+
 # Erfolgsmeldung ausgeben
 echo ""
 echo "========================================================="
-echo "Nextcloud wurde erfolgreich installiert!"
+echo "Nextcloud wurde installiert!"
 echo "========================================================="
-echo "URL: https://$IP_ADDRESS"
+
+if [ "$HTTP_AVAILABLE" = true ]; then
+    echo "HTTP-URL: http://$IP_ADDRESS"
+fi
+
+if [ "$HTTPS_AVAILABLE" = true ]; then
+    echo "HTTPS-URL: https://$IP_ADDRESS"
+else
+    echo "HTTPS-URL: https://$IP_ADDRESS (Selbstsigniertes Zertifikat - Browserwarnung bestätigen)"
+fi
+
 echo "Admin-Benutzer: $ADMIN_USER"
 echo "Admin-Passwort: $ADMIN_PASSWORD"
 echo ""
 echo "Diese Informationen wurden gespeichert in: $CREDENTIALS_FILE"
 echo "========================================================="
-echo "WICHTIG: Ändere das Passwort nach dem ersten Login und lösche"
-echo "         die Credentials-Datei aus Sicherheitsgründen!"
+echo "WICHTIG:"
+echo "- Ändere das Passwort nach dem ersten Login und lösche"
+echo "  die Credentials-Datei aus Sicherheitsgründen!"
+echo "- Falls du Verbindungsprobleme hast, prüfe folgendes:"
+echo "  * Firewall-Einstellungen (Ports 80 und 443)"
+echo "  * Führe 'snap restart nextcloud' aus"
+echo "  * Bei HTTPS: Akzeptiere das selbstsignierte Zertifikat"
 echo "========================================================="
