@@ -347,7 +347,6 @@ if [ -f "$config_file" ]; then
     cp "$tmp_file" "$config_file"
     rm "$tmp_file"
 fi
-fi
 
 # 20. Letzter Feinschliff
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
