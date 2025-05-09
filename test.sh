@@ -321,25 +321,26 @@ if [ -f "$config_file" ]; then
     tmp_file=$(mktemp)
     awk '
         /^\);$/ {
-            print "    'default_phone_region' => 'DE',";
-            print "    'enable_previews' => true,";
-            print "    'preview_max_x' => 2048,"; # Maximale Breite für Vorschaubilder
-            print "    'preview_max_y' => 2048,"; # Maximale Höhe für Vorschaubilder
-            print "    'jpeg_quality' => 80,";    # Qualität der JPEG-Vorschaubilder (0-100)
-            print "    'enabledPreviewProviders' => array (";
-            print "      0 => 'OC\\\\\\\\Preview\\\\\\\\PNG',";
-            print "      1 => 'OC\\\\\\\\Preview\\\\\\\\JPEG',";
-            print "      2 => 'OC\\\\\\\\Preview\\\\\\\\GIF',";
-            print "      3 => 'OC\\\\\\\\Preview\\\\\\\\BMP',";
-            print "      4 => 'OC\\\\\\\\Preview\\\\\\\\XBitmap',";
-            print "      5 => 'OC\\\\\\\\Preview\\\\\\\\MP3',";
-            print "      6 => 'OC\\\\\\\\Preview\\\\\\\\TXT',";
-            print "      7 => 'OC\\\\\\\\Preview\\\\\\\\MarkDown',";
-            print "      8 => 'OC\\\\\\\\Preview\\\\\\\\OpenDocument',";
-            print "      9 => 'OC\\\\\\\\Preview\\\\\\\\Krita',";
-            print "      10 => 'OC\\\\\\\\Preview\\\\\\\\HEIC',";
-            print "    ),";
-            print "    'maintenance_window_start' => 1,";
+            print "  \'htaccess.RewriteBase\' => \'/\',";
+            print "  \'default_phone_region\' => \'DE\',";
+            print "  \'enable_previews\' => true,";
+            print "  \'preview_max_x\' => 2048,";
+            print "  \'preview_max_y\' => 2048,";
+            print "  \'jpeg_quality\' => 80,";
+            print "  \'enabledPreviewProviders\' => array (";
+            print "    0 => \'OC\\\\\\\\Preview\\\\\\\\PNG\',";
+            print "    1 => \'OC\\\\\\\\Preview\\\\\\\\JPEG\',";
+            print "    2 => \'OC\\\\\\\\Preview\\\\\\\\GIF\',";
+            print "    3 => \'OC\\\\\\\\Preview\\\\\\\\BMP\',";
+            print "    4 => \'OC\\\\\\\\Preview\\\\\\\\XBitmap\',";
+            print "    5 => \'OC\\\\\\\\Preview\\\\\\\\MP3\',";
+            print "    6 => \'OC\\\\\\\\Preview\\\\\\\\TXT\',";
+            print "    7 => \'OC\\\\\\\\Preview\\\\\\\\MarkDown\',";
+            print "    8 => \'OC\\\\\\\\Preview\\\\\\\\OpenDocument\',";
+            print "    9 => \'OC\\\\\\\\Preview\\\\\\\\Krita\',";
+            print "    10 => \'OC\\\\\\\\Preview\\\\\\\\HEIC\',";
+            print "  ),";
+            print "  \'maintenance_window_start\' => 1,";
         }
         { print }
     ' "$config_file" > "$tmp_file"
