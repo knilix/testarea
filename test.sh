@@ -321,7 +321,6 @@ if [ -f "$config_file" ]; then
     tmp_file=$(mktemp)
     awk '
         /^\);$/ {
-            print "  \'htaccess.RewriteBase\' => \'/\',";
             print "  \'default_phone_region\' => \'DE\',";
             print "  \'enable_previews\' => true,";
             print "  \'preview_max_x\' => 2048,";
