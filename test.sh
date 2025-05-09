@@ -1,10 +1,10 @@
 #!/bin/bash
 # Maintainer: @knilix
-# Version: 1.0
+# Version: 1.1
 # Hinweis: Für Debian 12 und Ubuntu ab 22.04+ (x64), root erforderlich
 #
-# Herunterladen: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/test.sh
-# Installieren: cd && cd /opt/scriptfiles/testarea-main && ./test.sh
+# Herunterladen: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/nextcloud.sh
+# Installieren: cd && cd /opt/scriptfiles/testarea-main && ./nextcloud.sh
 # Bei Problemen, das Heuntergeladene wieder löschen: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 
 #
 # Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
@@ -33,14 +33,11 @@ elif grep -q "Debian" /etc/os-release; then
   [[ $(echo "$OS_VERSION < 12" | bc -l) -eq 1 ]] && { echo -e "${RED}Dieses Script benötigt Debian 12 oder neuer. Erkannte Version: $OS_VERSION${NC}"; exit 1; }
   echo -e "${BLUE}Debian $OS_VERSION erkannt. Fahre fort...${NC}"
 else
-  echo -e "${RED}Dieses Script unterstützt nur Debian und Ubuntu. Erkanntes System: $(grep -oP '(?<=^ID=).+' /etc/os-release)${NC}"
+  echo -e "${RED}Dieses Script unterstützt nur Debian oder Ubuntu. Erkanntes System: $(grep -oP '(?<=^ID=).+' /etc/os-release)${NC}"
   exit 1
 fi
 
 # 4. Konfigurationsparameter
-HTTPD_CONF_DIR="/etc/apache2"
-APACHE_USER="www-data"
-
 MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32)
 NEXTCLOUD_DB_PASSWORD=$(openssl rand -base64 32)
 NEXTCLOUD_DB_NAME="nextcloud"
@@ -71,12 +68,14 @@ read -p "Installation starten? (j/n): " CONFIRM
 echo -e "${BLUE}[1/10] System wird aktualisiert...${NC}"
 apt update && apt upgrade -y
 
+# 8. Benötigte Pakete installieren
 echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
 apt install -y bc apache2 mariadb-server redis-server \
-php php-cli php-common php-fpm php-json php-intl php-imagick \
-php-curl php-mbstring php-zip php-xml php-gd php-mysql \
-php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra \
-php-gmp ffmpeg ghostscript
+  php php-cli php-common php-fpm php-json php-intl php-imagick \
+  php-curl php-mbstring php-zip php-xml php-gd php-mysql \
+  php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra \
+  php-gmp \
+  ffmpeg ghostscript libreoffice
 
 # 9. Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
@@ -84,7 +83,7 @@ a2enmod rewrite headers env dir mime ssl
 
 # PHP-Version ermitteln und konfigurieren
 PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
-if [ -f "${HTTPD_CONF_DIR}/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
+if [ -f "/etc/apache2/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
   a2enconf "php${PHP_VERSION}-fpm"
 else
   a2enmod proxy_fcgi setenvif
@@ -162,7 +161,7 @@ sed -i "s/port 6379/port 0/" $REDIS_CONF
 sed -i "s/# unixsocket/unixsocket/" $REDIS_CONF
 sed -i "s/# unixsocketperm 700/unixsocketperm 770/" $REDIS_CONF
 sed -i "s/^unixsocketperm 700/unixsocketperm 770/" $REDIS_CONF 2>/dev/null || true
-usermod -a -G redis ${APACHE_USER}
+usermod -a -G redis www-data
 
 # Redis neustarten
 REDIS_SERVICE=$(systemctl list-units --type=service | grep -q "redis-server.service" && echo "redis-server" || echo "redis")
@@ -170,8 +169,6 @@ systemctl restart $REDIS_SERVICE || { echo -e "${RED}Redis-Service nicht gefunde
 
 # 12. PHP für Nextcloud optimieren
 echo -e "${BLUE}[6/10] PHP-Konfiguration für Nextcloud optimieren...${NC}"
-
-# Debian/Ubuntu PHP-Konfiguration
 for sapi in fpm cli apache2; do
     if [ -d "/etc/php/${PHP_VERSION}/$sapi/conf.d" ]; then
         echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
@@ -192,6 +189,41 @@ EOF
     fi
 done
 
+# Imagick-Konfiguration für erweiterte Thumbnail-Unterstützung
+mkdir -p /etc/ImageMagick-6/
+cat > /etc/ImageMagick-6/policy.xml << 'EOF'
+<policymap>
+  <policy domain="resource" name="memory" value="256MiB"/>
+  <policy domain="resource" name="map" value="512MiB"/>
+  <policy domain="resource" name="width" value="16KP"/>
+  <policy domain="resource" name="height" value="16KP"/>
+  <policy domain="resource" name="area" value="128MP"/>
+  <policy domain="resource" name="disk" value="1GiB"/>
+  <policy domain="delegate" rights="none" pattern="URL" />
+  <policy domain="delegate" rights="none" pattern="HTTPS" />
+  <policy domain="delegate" rights="none" pattern="HTTP" />
+  <policy domain="path" rights="none" pattern="@*"/>
+  <policy domain="coder" rights="read|write" pattern="PDF" />
+  <policy domain="coder" rights="read|write" pattern="LABEL" />
+  <policy domain="coder" rights="read|write" pattern="PS" />
+  <policy domain="coder" rights="read|write" pattern="PS2" />
+  <policy domain="coder" rights="read|write" pattern="PS3" />
+  <policy domain="coder" rights="read|write" pattern="EPS" />
+  <policy domain="coder" rights="read|write" pattern="XPS" />
+  <policy domain="coder" rights="read|write" pattern="GIF" />
+  <policy domain="coder" rights="read|write" pattern="JPEG" />
+  <policy domain="coder" rights="read|write" pattern="JPG" />
+  <policy domain="coder" rights="read|write" pattern="PNG" />
+  <policy domain="coder" rights="read|write" pattern="WEBP" />
+  <policy domain="coder" rights="read|write" pattern="SVG" />
+  <policy domain="coder" rights="read|write" pattern="TIFF" />
+  <policy domain="coder" rights="read|write" pattern="TIF" />
+  <policy domain="coder" rights="read|write" pattern="BMP" />
+  <policy domain="coder" rights="read|write" pattern="HEIC" />
+  <policy domain="coder" rights="read|write" pattern="AVIF" />
+</policymap>
+EOF
+
 # PHP-FPM neustarten
 [[ $(systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm") ]] && systemctl restart php${PHP_VERSION}-fpm
 
@@ -203,10 +235,7 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -out /etc/ssl/nextcloud/nextcloud.crt \
   -subj "/CN=${DOMAIN_NAME}/O=Nextcloud/C=DE"
 
-# Sicherstellen, dass sites-available existiert
-mkdir -p ${HTTPD_CONF_DIR}/sites-available/
-
-cat > ${HTTPD_CONF_DIR}/sites-available/nextcloud.conf << EOF
+cat > /etc/apache2/sites-available/nextcloud.conf << EOF
 <VirtualHost *:80>
     ServerName ${DOMAIN_NAME}
     Redirect permanent / https://${DOMAIN_NAME}/
@@ -234,8 +263,8 @@ cat > ${HTTPD_CONF_DIR}/sites-available/nextcloud.conf << EOF
         SetEnv HTTP_HOME /var/www/nextcloud
     </Directory>
 
-    ErrorLog ${HTTPD_CONF_DIR}/logs/nextcloud_error.log
-    CustomLog ${HTTPD_CONF_DIR}/logs/nextcloud_access.log combined
+    ErrorLog \${APACHE_LOG_DIR}/nextcloud_error.log
+    CustomLog \${APACHE_LOG_DIR}/nextcloud_access.log combined
 </VirtualHost>
 EOF
 
@@ -249,12 +278,12 @@ wget -q https://download.nextcloud.com/server/releases/latest.zip -O /tmp/nextcl
 unzip -q /tmp/nextcloud.zip -d /var/www/
 rm /tmp/nextcloud.zip
 mkdir -p "${NEXTCLOUD_DATA_DIR}"
-chown -R ${APACHE_USER}:${APACHE_USER} /var/www/nextcloud/ "${NEXTCLOUD_DATA_DIR}"
+chown -R www-data:www-data /var/www/nextcloud/ "${NEXTCLOUD_DATA_DIR}"
 
 # 15. Initialisieren
 echo -e "${BLUE}[9/10] Nextcloud wird initialisiert...${NC}"
 cd /var/www/nextcloud
-sudo -u ${APACHE_USER} php occ maintenance:install \
+sudo -u www-data php occ maintenance:install \
   --database "mysql" \
   --database-name "${NEXTCLOUD_DB_NAME}" \
   --database-user "${NEXTCLOUD_DB_USER}" \
@@ -264,21 +293,21 @@ sudo -u ${APACHE_USER} php occ maintenance:install \
   --data-dir "${NEXTCLOUD_DATA_DIR}"
 
 # Nextcloud Konfiguration
-sudo -u ${APACHE_USER} php occ config:system:set trusted_domains 0 --value="${DOMAIN_NAME}" \
-&& sudo -u ${APACHE_USER} php occ config:system:set trusted_domains 1 --value="${SERVER_IP}" \
-&& sudo -u ${APACHE_USER} php occ config:system:set memcache.local --value='\OC\Memcache\APCu' \
-&& sudo -u ${APACHE_USER} php occ config:system:set memcache.locking --value='\OC\Memcache\Redis' \
-&& sudo -u ${APACHE_USER} php occ config:system:set redis host --value='/var/run/redis/redis-server.sock' \
-&& sudo -u ${APACHE_USER} php occ config:system:set redis port --value=0 \
-&& sudo -u ${APACHE_USER} php occ config:system:set redis timeout --value=0.0 \
-&& sudo -u ${APACHE_USER} php occ config:system:set trusted_proxies 0 --value="127.0.0.1" \
-&& sudo -u ${APACHE_USER} php occ config:system:set overwriteprotocol --value="https" \
-&& sudo -u ${APACHE_USER} php occ config:system:set htaccess.RewriteBase --value="/" \
-&& sudo -u ${APACHE_USER} php occ maintenance:update:htaccess \
-&& sudo -u ${APACHE_USER} php occ background:cron # Korrektur: Background-Modus auf 'cron' setzen
+sudo -u www-data php occ config:system:set trusted_domains 0 --value="${DOMAIN_NAME}" \
+&& sudo -u www-data php occ config:system:set trusted_domains 1 --value="${SERVER_IP}" \
+&& sudo -u www-data php occ config:system:set memcache.local --value='\OC\Memcache\APCu' \
+&& sudo -u www-data php occ config:system:set memcache.locking --value='\OC\Memcache\Redis' \
+&& sudo -u www-data php occ config:system:set redis host --value='/var/run/redis/redis-server.sock' \
+&& sudo -u www-data php occ config:system:set redis port --value=0 \
+&& sudo -u www-data php occ config:system:set redis timeout --value=0.0 \
+&& sudo -u www-data php occ config:system:set trusted_proxies 0 --value="127.0.0.1" \
+&& sudo -u www-data php occ config:system:set overwriteprotocol --value="https" \
+&& sudo -u www-data php occ config:system:set htaccess.RewriteBase --value="/" \
+&& sudo -u www-data php occ maintenance:update:htaccess
 
 # 16. Cronjob
-echo "*/5 * * * * ${APACHE_USER} php -f /var/www/nextcloud/cron.php" > /etc/cron.d/nextcloud
+echo "*/5 * * * * www-data php -f /var/www/nextcloud/cron.php" > /etc/cron.d/nextcloud
+sudo -u www-data php occ background:cron
 
 # 17. Zugangsdaten speichern
 cat > "${CREDENTIALS_FILE}" << EOF
@@ -322,7 +351,7 @@ echo -e "\nInstalliert am: ${GREEN}${INSTALLATION_DATE}${NC}"
 EOF
 chmod +x /usr/local/bin/nextcloud-credentials
 
-# 19. Zusätzliche Nextcloud-Konfiguration
+# 19. Erweiterte Thumbnail-Konfiguration für Nextcloud
 config_file="/var/www/nextcloud/config/config.php"
 if [ -f "$config_file" ]; then
   tmp_file=$(mktemp)
@@ -330,6 +359,10 @@ if [ -f "$config_file" ]; then
     /^\);$/ {
       print "  '\''default_phone_region'\'' => '\''DE'\'',";
       print "  '\''enable_previews'\'' => true,";
+      print "  '\''preview_max_x'\'' => 2048,";
+      print "  '\''preview_max_y'\'' => 2048,";
+      print "  '\''preview_max_filesize_image'\'' => 50,";
+      print "  '\''preview_max_scale_factor'\'' => 10,";
       print "  '\''enabledPreviewProviders'\'' => array (";
       print "    0 => '\''OC\\\\\\\\Preview\\\\\\\\PNG'\'',";
       print "    1 => '\''OC\\\\\\\\Preview\\\\\\\\JPEG'\'',";
@@ -341,12 +374,25 @@ if [ -f "$config_file" ]; then
       print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
       print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
       print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
-      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',"; # Korrigiert: korrekte Klassennamen mit richtigem Escaping
-      print "    11 => '\''OC\\\\\\\\Preview\\\\\\\\WebP'\'',";  # Korrigiert: korrekte Klassennamen mit richtigem Escaping
-      print "    12 => '\''OC\\\\\\\\Preview\\\\\\\\PDF'\'',";   # Korrigiert: korrekte Klassennamen mit richtigem Escaping
-      print "    13 => '\''OC\\\\\\\\Preview\\\\\\\\Movie'\'',"; # Korrigiert: korrekte Klassennamen mit richtigem Escaping
+      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
+      print "    11 => '\''OC\\\\\\\\Preview\\\\\\\\PDF'\'',";
+      print "    12 => '\''OC\\\\\\\\Preview\\\\\\\\SVG'\'',";
+      print "    13 => '\''OC\\\\\\\\Preview\\\\\\\\TIFF'\'',";
+      print "    14 => '\''OC\\\\\\\\Preview\\\\\\\\Movie'\'',";
+      print "    15 => '\''OC\\\\\\\\Preview\\\\\\\\MSOffice2003'\'',";
+      print "    16 => '\''OC\\\\\\\\Preview\\\\\\\\MSOffice2007'\'',";
+      print "    17 => '\''OC\\\\\\\\Preview\\\\\\\\MSOfficeDoc'\'',";
+      print "    18 => '\''OC\\\\\\\\Preview\\\\\\\\Image'\'',";
+      print "    19 => '\''OC\\\\\\\\Preview\\\\\\\\Photoshop'\'',";
+      print "    20 => '\''OC\\\\\\\\Preview\\\\\\\\Illustrator'\'',";
+      print "    21 => '\''OC\\\\\\\\Preview\\\\\\\\EPUB'\'',";
+      print "    22 => '\''OC\\\\\\\\Preview\\\\\\\\Font'\'',";
+      print "    23 => '\''OC\\\\\\\\Preview\\\\\\\\StarOffice'\'',";
+      print "    24 => '\''OC\\\\\\\\Preview\\\\\\\\WebP'\'',";
       print "  ),";
       print "  '\''maintenance_window_start'\'' => 1,";
+      print "  '\''preview_concurrency_all'\'' => 2,";
+      print "  '\''preview_concurrency_all_max'\'' => 5,";
     }
     { print }
   ' "$config_file" > "$tmp_file"
@@ -355,10 +401,21 @@ if [ -f "$config_file" ]; then
   rm "$tmp_file"
 fi
 
-# 20. Letzter Feinschliff
-sudo -u ${APACHE_USER} php /var/www/nextcloud/occ maintenance:mode --on
-sudo -u ${APACHE_USER} php occ maintenance:repair --include-expensive
-systemctl restart apache2
+# 20. App installieren für verbesserte Vorschaubilder
+sudo -u www-data php /var/www/nextcloud/occ app:install previewgenerator
+sudo -u www-data php /var/www/nextcloud/occ app:enable previewgenerator
+
+# Cron-Job für die regelmäßige Thumbnail-Generierung einrichten
+echo "15 */6 * * * www-data php -f /var/www/nextcloud/occ preview:pre-generate" > /etc/cron.d/nextcloud-previews
+
+# 21. Letzter Feinschliff
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
+sudo -u www-data php occ maintenance:repair --include-expensive
+
+# Initialer Lauf des Preview-Generators
+sudo -u www-data php /var/www/nextcloud/occ preview:generate-all -vvv
+
+sudo systemctl restart apache2
 
 # Fortschrittsbalken
 echo "Warte, bis der Webserver vollständig hochgefahren ist..."
@@ -368,25 +425,12 @@ echo
 # Log bereinigen
 rm -f /var/www/nextcloud/data/nextcloud.log
 curl -s -o /dev/null http://localhost || true
-sudo -u ${APACHE_USER} php /var/www/nextcloud/occ maintenance:mode --off
+sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --off
 
 # Bereinigen
 rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
 
-# 22. Vorschaugenerierung konfigurieren
-echo -e "${BLUE}[10/10] Vorschaugenerierung wird eingerichtet...${NC}"
-sudo -u ${APACHE_USER} php /var/www/nextcloud/occ app:install previewgenerator || true
-sudo -u ${APACHE_USER} php /var/www/nextcloud/occ app:enable previewgenerator || true
-
-# Optional: Vorschauen gleich generieren (kann lange dauern bei vielen Dateien)
-# sudo -u ${APACHE_USER} php /var/www/nextcloud/occ preview:generate-all
-
-# Empfehlung: Automatisch fehlende Vorschaubilder regelmäßig generieren
-if ! grep -q "preview:pre-generate" /etc/cron.d/nextcloud-preview 2>/dev/null; then
-  echo "0 3 * * * ${APACHE_USER} php /var/www/nextcloud/occ preview:pre-generate" > /etc/cron.d/nextcloud-preview
-fi
-
-# 21. Abschlussmeldung
+# 22. Abschlussmeldung
 clear
 echo -e "${BLUE}===== Nextcloud Zugangsdaten =====\n${NC}"
 echo -e "\n${BLUE}Zugangsdaten:${NC}"
@@ -397,4 +441,7 @@ echo -e "${GREEN}===== Nextcloud Installation abgeschlossen! =====${NC}"
 echo -e "Anmeldung unter folgendem Link:\n"
 echo -e "IP:     ${BLUE}https://${SERVER_IP}${NC}"
 echo -e "\nBenutzen Sie den Befehl ${GREEN}nextcloud-credentials${NC}, um Ihre kompletten Zugangsdaten anzuzeigen."
+echo
+echo -e "${GREEN}Erweiterte Thumbnail-Unterstützung wurde aktiviert.${NC}"
+echo -e "Die Vorschaubilder werden im Hintergrund generiert und stehen bald zur Verfügung."
 echo
