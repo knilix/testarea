@@ -11,8 +11,6 @@
 # Mit MariaDB und Redis Cache
 # -----------------------------------------------------------------------------
 # 1. Fehler-Handling und Farben
-#!/bin/bash
-
 set -euo pipefail
 
 echo "=== Nextcloud-Installation über Snap auf Ubuntu Server ==="
@@ -41,15 +39,28 @@ else
   echo "[WARNUNG] Nextcloud ist bereits installiert (Snap)."
 fi
 
-# Warte auf Initialisierung
+# Warte auf einsatzbereite nextcloud.occ
 echo "[INFO] Warte auf Nextcloud-Dienst (Snap) ..."
-sleep 20
+for i in {1..30}; do
+  if nextcloud.occ status &>/dev/null; then
+    echo "[INFO] Nextcloud ist bereit."
+    break
+  fi
+  echo "[INFO] Noch nicht bereit – warte 5s ($i/30)"
+  sleep 5
+done
+
+# Prüfen, ob .occ verfügbar ist
+if ! nextcloud.occ status &>/dev/null; then
+  echo "[FEHLER] Nextcloud ist nach 150 Sekunden noch nicht bereit. Abbruch."
+  exit 1
+fi
 
 # Generiere Admin-Zugangsdaten
 ADMIN_USER="admin"
 PASSWORD=$(tr -dc 'A-Za-z0-9!#$%&()*+,-.:;<=>?@[]^_{}~' < /dev/urandom | head -c 24)
 
-# Setze Admin-Benutzer (nur falls noch nicht gesetzt)
+# Setze Admin-Benutzer (nur wenn noch nicht vorhanden)
 if ! nextcloud.occ user:info "$ADMIN_USER" &>/dev/null; then
   echo "[INFO] Admin-Benutzer wird eingerichtet ..."
   nextcloud.manual-install "$ADMIN_USER" "$PASSWORD"
@@ -78,9 +89,8 @@ CREDENTIAL_FILE="/root/nextcloud_admin_credentials.txt"
 chmod 600 "$CREDENTIAL_FILE"
 
 # Ausgabe
-echo -e "\n=== ✅ Nextcloud erfolgreich installiert ==="
-echo "📬 URL:       http://$IP"
-echo "👤 Benutzer:  $ADMIN_USER"
-echo "🔐 Passwort:  $PASSWORD"
-echo "💾 Gespeichert in: $CREDENTIAL_FILE (nur root-lesbar)"
-
+echo -e "\n=== Nextcloud erfolgreich installiert ==="
+echo " URL:       http://$IP"
+echo " Benutzer:  $ADMIN_USER"
+echo " Passwort:  $PASSWORD"
+echo " Gespeichert in: $CREDENTIAL_FILE (nur root-lesbar)"
