@@ -102,20 +102,40 @@ fi
 
 # 9. Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
-a2enmod rewrite headers env dir mime ssl
+if [[ "$OS_TYPE" == "Fedora" ]]; then
+  # Fedora verwendet bereits Module in httpd.conf
+  PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+  
+  # Erstellen von PHP-FPM Konfiguration für Apache auf Fedora
+  cat > /etc/httpd/conf.d/php-fpm.conf << EOF
+<FilesMatch \.php$>
+  SetHandler "proxy:unix:/run/php-fpm/www.sock|fcgi://localhost"
+</FilesMatch>
+EOF
 
-# PHP-Version ermitteln und konfigurieren
-PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
-if [ -f "${HTTPD_CONF_DIR}/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
-  a2enconf "php${PHP_VERSION}-fpm"
+  # Sicherstellen, dass notwendige Module geladen sind
+  for mod in rewrite headers env dir mime ssl proxy_fcgi; do
+    if ! grep -q "LoadModule ${mod}_module" /etc/httpd/conf.modules.d/*.conf; then
+      echo "LoadModule ${mod}_module modules/mod_${mod}.so" > "/etc/httpd/conf.modules.d/00-${mod}.conf"
+    fi
+  done
 else
-  a2enmod proxy_fcgi setenvif
-  a2enconf php${PHP_VERSION}-fpm
+  a2enmod rewrite headers env dir mime ssl
+
+  # PHP-Version ermitteln und konfigurieren
+  PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+  if [ -f "${HTTPD_CONF_DIR}/conf-available/php${PHP_VERSION}-fpm.conf" ]; then
+    a2enconf "php${PHP_VERSION}-fpm"
+  else
+    a2enmod proxy_fcgi setenvif
+    a2enconf php${PHP_VERSION}-fpm
+  fi
 fi
 
 if [[ "$OS_TYPE" == "Fedora" ]]; then
   systemctl enable --now httpd
-  systemctl restart php-fpm
+  # Fedora verwendet php-fpm.service ohne Version im Namen
+  systemctl restart php-fpm.service
 else
   systemctl restart apache2
 fi
@@ -197,10 +217,18 @@ systemctl restart $REDIS_SERVICE || { echo -e "${RED}Redis-Service nicht gefunde
 
 # 12. PHP für Nextcloud optimieren
 echo -e "${BLUE}[6/10] PHP-Konfiguration für Nextcloud optimieren...${NC}"
-for sapi in fpm cli apache2; do
-    if [ -d "/etc/php/${PHP_VERSION}/$sapi/conf.d" ]; then
-        echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
-        cat > /etc/php/${PHP_VERSION}/$sapi/conf.d/99-nextcloud.ini << EOF
+
+if [[ "$OS_TYPE" == "Fedora" ]]; then
+    # Fedora-spezifische PHP-Konfiguration
+    PHP_CONFIG_PATHS=(
+        "/etc/php.d"
+        "/etc/php-fpm.d"
+    )
+    
+    for path in "${PHP_CONFIG_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            echo -e "${BLUE}→ PHP-Konfiguration in $path wird erstellt...${NC}"
+            cat > "$path/99-nextcloud.ini" << EOF
 memory_limit = 512M
 upload_max_filesize = 500M
 post_max_size = 500M
@@ -214,11 +242,37 @@ opcache.memory_consumption=128
 opcache.save_comments=1
 opcache.revalidate_freq=1
 EOF
-    fi
-done
+        fi
+    done
+else
+    # Debian/Ubuntu PHP-Konfiguration
+    for sapi in fpm cli apache2; do
+        if [ -d "/etc/php/${PHP_VERSION}/$sapi/conf.d" ]; then
+            echo -e "${BLUE}→ PHP-SAPI: $sapi wird konfiguriert...${NC}"
+            cat > /etc/php/${PHP_VERSION}/$sapi/conf.d/99-nextcloud.ini << EOF
+memory_limit = 512M
+upload_max_filesize = 500M
+post_max_size = 500M
+max_execution_time = 300
+date.timezone = Europe/Berlin
+
+opcache.enable=1
+opcache.interned_strings_buffer=32
+opcache.max_accelerated_files=10000
+opcache.memory_consumption=128
+opcache.save_comments=1
+opcache.revalidate_freq=1
+EOF
+        fi
+    done
+fi
 
 # PHP-FPM neustarten
-[[ $(systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm") ]] && systemctl restart php${PHP_VERSION}-fpm
+if [[ "$OS_TYPE" == "Fedora" ]]; then
+  systemctl restart php-fpm.service
+else
+  [[ $(systemctl list-units --type=service | grep -q "php${PHP_VERSION}-fpm") ]] && systemctl restart php${PHP_VERSION}-fpm
+fi
 
 # 13. Apache Virtual Host konfigurieren
 echo -e "${BLUE}[7/10] Apache Virtual Host für Nextcloud wird konfiguriert...${NC}"
@@ -227,6 +281,9 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout /etc/ssl/nextcloud/nextcloud.key \
   -out /etc/ssl/nextcloud/nextcloud.crt \
   -subj "/CN=${DOMAIN_NAME}/O=Nextcloud/C=DE"
+
+# Sicherstellen, dass sites-available existiert
+mkdir -p ${HTTPD_CONF_DIR}/sites-available/
 
 cat > ${HTTPD_CONF_DIR}/sites-available/nextcloud.conf << EOF
 <VirtualHost *:80>
@@ -256,14 +313,30 @@ cat > ${HTTPD_CONF_DIR}/sites-available/nextcloud.conf << EOF
         SetEnv HTTP_HOME /var/www/nextcloud
     </Directory>
 
-    ErrorLog \${APACHE_LOG_DIR}/nextcloud_error.log
-    CustomLog \${APACHE_LOG_DIR}/nextcloud_access.log combined
+    ErrorLog ${HTTPD_CONF_DIR}/logs/nextcloud_error.log
+    CustomLog ${HTTPD_CONF_DIR}/logs/nextcloud_access.log combined
 </VirtualHost>
 EOF
 
-a2enmod headers ssl
-a2ensite nextcloud.conf
-systemctl reload apache2
+if [[ "$OS_TYPE" == "Fedora" ]]; then
+  # Sicherstellen, dass das Verzeichnis für die Konfiguration existiert
+  mkdir -p /etc/httpd/sites-available/
+  mkdir -p /etc/httpd/sites-enabled/
+  
+  # Konfiguration für Sites-Enabled in httpd.conf einfügen, falls nicht vorhanden
+  if ! grep -q "IncludeOptional sites-enabled" /etc/httpd/conf/httpd.conf; then
+    echo "IncludeOptional sites-enabled/*.conf" >> /etc/httpd/conf/httpd.conf
+  fi
+  
+  # Symlink erstellen, ähnlich wie a2ensite
+  ln -sf ${HTTPD_CONF_DIR}/sites-available/nextcloud.conf ${HTTPD_CONF_DIR}/sites-enabled/nextcloud.conf
+  
+  systemctl reload httpd
+else
+  a2enmod headers ssl
+  a2ensite nextcloud.conf
+  systemctl reload apache2
+fi
 
 # 14. Nextcloud installieren
 echo -e "${BLUE}[8/10] Nextcloud wird heruntergeladen und installiert...${NC}"
@@ -382,7 +455,8 @@ sudo -u ${APACHE_USER} php /var/www/nextcloud/occ maintenance:mode --on
 sudo -u ${APACHE_USER} php occ maintenance:repair --include-expensive
 if [[ "$OS_TYPE" == "Fedora" ]]; then
   systemctl enable --now httpd
-  systemctl restart php-fpm
+  systemctl restart php-fpm.service
+  systemctl restart httpd
 else
   systemctl restart apache2
 fi
