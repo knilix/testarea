@@ -10,18 +10,19 @@
 # Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
 # Mit MariaDB und Redis Cache
 # -----------------------------------------------------------------------------
-# 1. Fehler-Handling und Farben
+# 
+#!/bin/bash
 set -euo pipefail
 
-echo "=== Nextcloud-Installation über Snap auf Ubuntu Server ==="
+echo "=== 🚀 Nextcloud (Snap) Setup für Ubuntu Server ==="
 
-# Check root
+# Root-Check
 if [[ "$EUID" -ne 0 ]]; then
-  echo "Dieses Skript muss als root ausgeführt werden." >&2
+  echo "❌ Dieses Skript muss als root ausgeführt werden."
   exit 1
 fi
 
-# Installiere snapd, falls nicht vorhanden
+# Snapd installieren (wenn nötig)
 if ! command -v snap &> /dev/null; then
   echo "[INFO] snapd wird installiert ..."
   apt update
@@ -31,16 +32,16 @@ else
   echo "[INFO] snapd ist bereits installiert."
 fi
 
-# Installiere Nextcloud über Snap
+# Nextcloud installieren (Snap)
 if ! snap list | grep -q nextcloud; then
-  echo "[INFO] Nextcloud (Snap) wird installiert ..."
+  echo "[INFO] Nextcloud wird installiert (Snap) ..."
   snap install nextcloud
 else
-  echo "[WARNUNG] Nextcloud ist bereits installiert (Snap)."
+  echo "[WARNUNG] Nextcloud ist bereits installiert."
 fi
 
-# Warte auf einsatzbereite nextcloud.occ
-echo "[INFO] Warte auf Nextcloud-Dienst (Snap) ..."
+# Auf nextcloud.occ warten (max. 150 Sekunden)
+echo "[INFO] Warte auf Nextcloud-Dienst ..."
 for i in {1..30}; do
   if nextcloud.occ status &>/dev/null; then
     echo "[INFO] Nextcloud ist bereit."
@@ -50,36 +51,30 @@ for i in {1..30}; do
   sleep 5
 done
 
-# Prüfen, ob .occ verfügbar ist
-if ! nextcloud.occ status &>/dev/null; then
-  echo "[FEHLER] Nextcloud ist nach 150 Sekunden noch nicht bereit. Abbruch."
-  exit 1
-fi
-
-# Generiere Admin-Zugangsdaten
-ADMIN_USER="admin"
-PASSWORD=$(tr -dc 'A-Za-z0-9!#$%&()*+,-.:;<=>?@[]^_{}~' < /dev/urandom | head -c 24)
-
-# Setze Admin-Benutzer (nur wenn noch nicht vorhanden)
-if ! nextcloud.occ user:info "$ADMIN_USER" &>/dev/null; then
-  echo "[INFO] Admin-Benutzer wird eingerichtet ..."
-  nextcloud.manual-install "$ADMIN_USER" "$PASSWORD"
+# Prüfung: Nextcloud initialisiert?
+if nextcloud.occ status | grep -q "installed: true"; then
+  echo "[INFO] Nextcloud ist bereits initialisiert."
+  ADMIN_USER=$(nextcloud.occ user:list 2>/dev/null | awk -F: '/^\s+\S/ {print $1}' | head -n1 | xargs)
+  PASSWORD="(bestehend)"
 else
-  echo "[WARNUNG] Admin-Benutzer existiert bereits – Passwort bleibt unverändert."
+  echo "[INFO] Nextcloud ist noch nicht initialisiert. Setze Admin-Benutzer ..."
+  ADMIN_USER="admin"
+  PASSWORD=$(tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 24)
+  nextcloud.manual-install "$ADMIN_USER" "$PASSWORD"
 fi
 
-# Ermittle IP-Adresse
+# IP-Adresse ermitteln
 IP=$(hostname -I | awk '{print $1}')
 echo "[INFO] Server-IP-Adresse erkannt: $IP"
 
-# Setze Trusted Domain
+# Trusted Domain setzen
 nextcloud.occ config:system:set trusted_domains 1 --value="$IP"
 
-# Behebe Transport-Header-Warnung
+# Transport-Header-Warnung beheben
 nextcloud.occ config:system:set overwrite.cli.url --value="http://$IP"
 nextcloud.occ config:system:set overwriteprotocol --value="http"
 
-# Zugangsdaten speichern
+# Zugangsdaten sicher speichern
 CREDENTIAL_FILE="/root/nextcloud_admin_credentials.txt"
 {
   echo "Nextcloud URL: http://$IP"
@@ -89,8 +84,9 @@ CREDENTIAL_FILE="/root/nextcloud_admin_credentials.txt"
 chmod 600 "$CREDENTIAL_FILE"
 
 # Ausgabe
-echo -e "\n=== Nextcloud erfolgreich installiert ==="
-echo " URL:       http://$IP"
-echo " Benutzer:  $ADMIN_USER"
-echo " Passwort:  $PASSWORD"
-echo " Gespeichert in: $CREDENTIAL_FILE (nur root-lesbar)"
+echo -e "\n=== ✅ Nextcloud Setup abgeschlossen ==="
+echo "🌐 URL:       http://$IP"
+echo "👤 Benutzer:  $ADMIN_USER"
+echo "🔐 Passwort:  $PASSWORD"
+echo "💾 Zugangsdaten gespeichert unter: $CREDENTIAL_FILE (nur root-lesbar)"
+
