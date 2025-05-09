@@ -87,7 +87,7 @@ if [[ "$OS_TYPE" == "Fedora" ]]; then
   dnf update -y
 
   echo -e "${BLUE}[2/10] Benötigte Pakete werden installiert...${NC}"
-  dnf install -y httpd mariadb-server redis php php-cli php-fpm php-mysqlnd php-gd php-json php-mbstring php-xml php-bcmath php-intl php-zip php-process php-pecl-imagick php-pecl-apcu php-pecl-redis curl wget unzip openssl policycoreutils-python-utils
+  dnf install -y httpd mariadb-server redis php php-cli php-fpm php-mysqlnd php-gd php-json php-mbstring php-xml php-bcmath php-intl php-zip php-process php-pecl-imagick php-pecl-apcu php-pecl-redis curl wget unzip openssl policycoreutils-python-utils ffmpeg ghostscript
 else
   echo -e "${BLUE}[1/10] System wird aktualisiert...${NC}"
   apt update && apt upgrade -y
@@ -97,7 +97,7 @@ else
   php php-cli php-common php-fpm php-json php-intl php-imagick \
   php-curl php-mbstring php-zip php-xml php-gd php-mysql \
   php-bz2 php-redis php-apcu unzip curl wget ssl-cert pv libmagickcore-6.q16-6-extra \
-  php-gmp
+  php-gmp ffmpeg ghostscript
 
 # 9. Apache für PHP konfigurieren
 echo -e "${BLUE}[3/10] Apache für PHP konfigurieren...${NC}"
@@ -362,8 +362,11 @@ if [ -f "$config_file" ]; then
       print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
       print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
       print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
-      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
-      print "  ),";
+	  print "    10 => '\\\\OC\\\\Preview\\\\HEIC',";
+      print "    11 => '\\\\OC\\\\Preview\\\\WebP',";
+      print "    12 => '\\\\OC\\\\Preview\\\\PDF',";
+      print "    13 => '\\\\OC\\\\Preview\\\\Movie',";
+	  print "  ),";
       print "  '\''maintenance_window_start'\'' => 1,";
     }
     { print }
@@ -395,6 +398,21 @@ sudo -u ${APACHE_USER} php /var/www/nextcloud/occ maintenance:mode --off
 
 # Bereinigen
 rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 2>/dev/null || true
+
+
+# 22. Vorschaugenerierung konfigurieren
+echo -e "${BLUE}[10/10] Vorschaugenerierung wird eingerichtet...${NC}"
+sudo -u ${APACHE_USER} php /var/www/nextcloud/occ app:install previewgenerator || true
+sudo -u ${APACHE_USER} php /var/www/nextcloud/occ app:enable previewgenerator || true
+
+# Optional: Vorschauen gleich generieren (kann lange dauern bei vielen Dateien)
+# sudo -u ${APACHE_USER} php /var/www/nextcloud/occ preview:generate-all
+
+# Empfehlung: Automatisch fehlende Vorschaubilder regelmäßig generieren
+if ! grep -q "preview:pre-generate" /etc/cron.d/nextcloud-preview 2>/dev/null; then
+  echo "0 3 * * * ${APACHE_USER} php /var/www/nextcloud/occ preview:pre-generate" > /etc/cron.d/nextcloud-preview
+fi
+
 
 # 21. Abschlussmeldung
 clear
