@@ -296,11 +296,11 @@ sudo -u ${APACHE_USER} php occ config:system:set trusted_domains 0 --value="${DO
 && sudo -u ${APACHE_USER} php occ config:system:set trusted_proxies 0 --value="127.0.0.1" \
 && sudo -u ${APACHE_USER} php occ config:system:set overwriteprotocol --value="https" \
 && sudo -u ${APACHE_USER} php occ config:system:set htaccess.RewriteBase --value="/" \
-&& sudo -u ${APACHE_USER} php occ maintenance:update:htaccess
+&& sudo -u ${APACHE_USER} php occ maintenance:update:htaccess \
+&& sudo -u ${APACHE_USER} php occ background:cron # Korrektur: Background-Modus auf 'cron' setzen
 
 # 16. Cronjob
 echo "*/5 * * * * ${APACHE_USER} php -f /var/www/nextcloud/cron.php" > /etc/cron.d/nextcloud
-sudo -u ${APACHE_USER} php occ background:cron
 
 # 17. Zugangsdaten speichern
 cat > "${CREDENTIALS_FILE}" << EOF
@@ -363,11 +363,11 @@ if [ -f "$config_file" ]; then
       print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
       print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
       print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
-	  print "    10 => '\\\\OC\\\\Preview\\\\HEIC',";
-      print "    11 => '\\\\OC\\\\Preview\\\\WebP',";
-      print "    12 => '\\\\OC\\\\Preview\\\\PDF',";
-      print "    13 => '\\\\OC\\\\Preview\\\\Movie',";
-	  print "  ),";
+      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',"; # Korrigiert: korrekte Klassennamen mit richtigem Escaping
+      print "    11 => '\''OC\\\\\\\\Preview\\\\\\\\WebP'\'',";  # Korrigiert: korrekte Klassennamen mit richtigem Escaping
+      print "    12 => '\''OC\\\\\\\\Preview\\\\\\\\PDF'\'',";   # Korrigiert: korrekte Klassennamen mit richtigem Escaping
+      print "    13 => '\''OC\\\\\\\\Preview\\\\\\\\Movie'\'',"; # Korrigiert: korrekte Klassennamen mit richtigem Escaping
+      print "  ),";
       print "  '\''maintenance_window_start'\'' => 1,";
     }
     { print }
