@@ -406,14 +406,14 @@ sudo -u www-data php /var/www/nextcloud/occ app:install previewgenerator
 sudo -u www-data php /var/www/nextcloud/occ app:enable previewgenerator
 
 # Cron-Job für die regelmäßige Thumbnail-Generierung einrichten
-echo "15 */6 * * * www-data php -f /var/www/nextcloud/occ preview:pre-generate" > /etc/cron.d/nextcloud-previews
+echo "15 */6 * * * www-data php -f /var/www/nextcloud/occ preview:generate" > /etc/cron.d/nextcloud-previews
 
 # 21. Letzter Feinschliff
 sudo -u www-data php /var/www/nextcloud/occ maintenance:mode --on
 sudo -u www-data php occ maintenance:repair --include-expensive
 
 # Initialer Lauf des Preview-Generators
-sudo -u www-data php /var/www/nextcloud/occ preview:generate-all -vvv
+sudo -u www-data php /var/www/nextcloud/occ preview:generate -vvv
 
 sudo systemctl restart apache2
 
