@@ -324,17 +324,17 @@ if [ -f "$config_file" ]; then
       print "  '\''default_phone_region'\'' => '\''DE'\'',";
       print "  '\''enable_previews'\'' => true,";
       print "  '\''enabledPreviewProviders'\'' => array (";
-      print "    0 => '\''OC\\\\\\\\Preview\\\\\\\\PNG'\'',";
-      print "    1 => '\''OC\\\\\\\\Preview\\\\\\\\JPEG'\'',";
-      print "    2 => '\''OC\\\\\\\\Preview\\\\\\\\GIF'\'',";
-      print "    3 => '\''OC\\\\\\\\Preview\\\\\\\\BMP'\'',";
-      print "    4 => '\''OC\\\\\\\\Preview\\\\\\\\XBitmap'\'',";
-      print "    5 => '\''OC\\\\\\\\Preview\\\\\\\\MP3'\'',";
-      print "    6 => '\''OC\\\\\\\\Preview\\\\\\\\TXT'\'',";
-      print "    7 => '\''OC\\\\\\\\Preview\\\\\\\\MarkDown'\'',";
-      print "    8 => '\''OC\\\\\\\\Preview\\\\\\\\OpenDocument'\'',";
-      print "    9 => '\''OC\\\\\\\\Preview\\\\\\\\Krita'\'',";
-      print "    10 => '\''OC\\\\\\\\Preview\\\\\\\\HEIC'\'',";
+      print "    0 => '\''OC\\\\\\Preview\\\\\\PNG'\'',";
+      print "    1 => '\''OC\\\\\\Preview\\\\\\JPEG'\'',";
+      print "    2 => '\''OC\\\\\\Preview\\\\\\GIF'\'',";
+      print "    3 => '\''OC\\\\\\Preview\\\\\\BMP'\'',";
+      print "    4 => '\''OC\\\\\\Preview\\\\\\XBitmap'\'',";
+      print "    5 => '\''OC\\\\\\Preview\\\\\\MP3'\'',";
+      print "    6 => '\''OC\\\\\\Preview\\\\\\TXT'\'',";
+      print "    7 => '\''OC\\\\\\Preview\\\\\\MarkDown'\'',";
+      print "    8 => '\''OC\\\\\\Preview\\\\\\OpenDocument'\'',";
+      print "    9 => '\''OC\\\\\\Preview\\\\\\Krita'\'',";
+      print "    10 => '\''OC\\\\\\Preview\\\\\\HEIC'\'',";
       print "  ),";
       print "  '\''maintenance_window_start'\'' => 1,";
     }
