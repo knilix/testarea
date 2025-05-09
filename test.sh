@@ -11,7 +11,6 @@
 # Mit MariaDB und Redis Cache
 # -----------------------------------------------------------------------------
 # 
-#!/bin/bash
 set -euo pipefail
 
 echo "=== 🚀 Nextcloud (Snap) Setup für Ubuntu Server ==="
@@ -57,9 +56,20 @@ if nextcloud.occ status | grep -q "installed: true"; then
   ADMIN_USER=$(nextcloud.occ user:list 2>/dev/null | awk -F: '/^\s+\S/ {print $1}' | head -n1 | xargs)
   PASSWORD="(bestehend)"
 else
-  echo "[INFO] Nextcloud ist noch nicht initialisiert. Setze Admin-Benutzer ..."
+  echo "[INFO] Nextcloud ist noch nicht initialisiert. Warte auf Snap-Initialisierer ..."
+
+  for i in {1..20}; do
+    if nextcloud.manual-install test test 2>&1 | grep -q "Nextcloud is not installed"; then
+      echo "[INFO] Nextcloud ist bereit für manuelle Installation."
+      break
+    fi
+    echo "[INFO] Warte auf Installationsbereitschaft (manual-install) ($i/20) ..."
+    sleep 5
+  done
+
   ADMIN_USER="admin"
   PASSWORD=$(tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 24)
+  echo "[INFO] Lege Benutzer '$ADMIN_USER' an ..."
   nextcloud.manual-install "$ADMIN_USER" "$PASSWORD"
 fi
 
@@ -89,4 +99,3 @@ echo "🌐 URL:       http://$IP"
 echo "👤 Benutzer:  $ADMIN_USER"
 echo "🔐 Passwort:  $PASSWORD"
 echo "💾 Zugangsdaten gespeichert unter: $CREDENTIAL_FILE (nur root-lesbar)"
-
