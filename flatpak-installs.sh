@@ -9,7 +9,7 @@
  # Vorher erledigen: 
  # - installieren von wget und zip 
  #
- # Es werden mit diesem Script Flatpak und folgende Apps installiert: Discord, Gimp, AbiWord, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles, ProtonPlus, BoxBuddy, 
+ # Es werden mit diesem Script Flatpak und folgende Apps installiert: Discord, Gimp, AbiWord, Blender, Kdenlive, OBSStudio, Misicpod, Flameshot, Bottles, ProtonPlus, BoxBuddy, 
  # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI.
  # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext.
  # Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
@@ -126,11 +126,9 @@
    "org.gimp.GIMP"
    "com.abisource.AbiWord"
    "org.blender.Blender"
-   "net.lutris.Lutris"
    "org.kde.kdenlive"
    "com.obsproject.Studio"
    "org.feichtmeier.Musicpod"
-   "sa.sy.bluerecorder"
    "org.flameshot.Flameshot"
    "com.usebottles.bottles"
    "com.vysp3r.ProtonPlus"
