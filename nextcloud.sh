@@ -1,15 +1,25 @@
 #!/bin/bash
 # Maintainer: @knilix
-# Version: 1.0
+# Version: 1.0.1
+####################################################################################################################################################################################################
+# Nur Test (Jeder ist für sein System selbst verantwortlich! Ich hafte nicht für Schäden!)
 # Hinweis: Für Debian 12 und Ubuntu ab 22.04+ (x64), root erforderlich
-#
 # Herunterladen: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/nextcloud.sh
 # Installieren: cd && cd /opt/scriptfiles/testarea-main && ./nextcloud.sh
 # Bei Problemen, das Heuntergeladene wieder löschen: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip 
 #
 # Script nur einmalig ausführen - - Abfrage einer vorhandenen Nextcloud-Datenbank noch nicht implementiert!
-# Mit MariaDB und Redis Cache
-# -----------------------------------------------------------------------------
+# Mit Apache2, MariaDB und Redis Cache
+####################################################################################################################################################################################################
+# Only Test (Everyone is responsible for their own system! I am not liable for any damage!)
+# Note: For Debian 12 and Ubuntu from 22.04+ (x64), root required
+# Download: wget -q -P /opt/ https://github.com/knilix/testarea/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testarea-main/nextcloud.sh
+# Install: cd && cd /opt/scriptfiles/testarea-main && ./nextcloud.sh
+# In case of problems, delete the downloaded files: rm -rf /opt/scriptfiles/testarea-main /opt/main.zip
+#
+# Execute script only once - - Query of an existing Nextcloud database not yet implemented!
+# With Apache2, MariaDB and Redis Cache
+####################################################################################################################################################################################################
 # 1. Fehler-Handling und Farben
 set -e
 trap 'echo "Ein Fehler ist aufgetreten. Installation wurde abgebrochen."' ERR
