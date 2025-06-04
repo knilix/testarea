@@ -252,6 +252,7 @@ wget -q https://download.nextcloud.com/server/releases/latest.zip -O /tmp/nextcl
 unzip -q /tmp/nextcloud.zip -d /var/www/
 rm /tmp/nextcloud.zip
 mkdir -p "${NEXTCLOUD_DATA_DIR}"
+touch /opt/nextcloud.log
 chown -R www-data:www-data /var/www/nextcloud/ "${NEXTCLOUD_DATA_DIR}"
 
 # 15. Initialisieren
@@ -333,6 +334,8 @@ if [ -f "$config_file" ]; then
     /^\);$/ {
       print "  '\''default_phone_region'\'' => '\''DE'\'',";
       print "  '\''enable_previews'\'' => true,";
+      print "  '\''logging_enabled'\'' => true,";
+      print "  '\''loglevel'\'' => 2,";      
       print "  '\''enabledPreviewProviders'\'' => array (";
       print "    0 => '\''OC\\\\Preview\\\\PNG'\'',";
       print "    1 => '\''OC\\\\Preview\\\\JPEG'\'',";
