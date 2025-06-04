@@ -334,7 +334,6 @@ if [ -f "$config_file" ]; then
     /^\);$/ {
       print "  '\''default_phone_region'\'' => '\''DE'\'',";
       print "  '\''enable_previews'\'' => true,";
-      print "  '\''logfile'\'' => '\''/opt/nextcloudlog'\'',";
       print "  '\''logging_enabled'\'' => true,";
       print "  '\''loglevel'\'' => 2,";      
       print "  '\''enabledPreviewProviders'\'' => array (";
