@@ -9,9 +9,8 @@
  # Vorher erledigen: 
  # - installieren von wget und zip 
  #
- # Es werden mit diesem Script Flatpak und folgende Apps installiert: Discord, Gimp, AbiWord, Blender, Kdenlive, OBSStudio, Misicpod, Flameshot, Bottles, ProtonPlus, BoxBuddy, 
- # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI.
- # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext.
+ # Es werden mit diesem Script Flatpak und folgende Apps installiert: Discord, Gimp, Blender, Kdenlive, OBSStudio, Misicpod, Flameshot, Bottles, ProtonPlus, 
+ # Clapgrep, Filelight, Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext, Termius.
  # Es wird geprüft, ob Flatpak installiert ist. Wenn nicht, wird es installiert.
  # Es wird geprüft of die zu installierenden Flatpak-Apps schon per Snap oder Nativ installiert sind. Wenn ja, wird die Installation der jeweiligen Flatpak-App übersprungen.
  # Warnhinweise, die nur informativ sind und keinerlei Einfluss auf die Funktion der jeweiligen App haben, z.B. weil KDE statt Gnome verwendet wird, werden ausgeblendet.
@@ -22,9 +21,8 @@
  # Do it beforehand:
  # - install wget and zip
  #
- # This script installs Flatpak and the following apps: Discord, Gimp, AbiWord, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles, ProtonPlus, BoxBuddy, Clapgrep, Filelight,
- # Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI.
- # Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext.
+ # This script installs Flatpak and the following apps: Discord, Gimp, Blender, Lutris, Kdenlive, OBSStudio, Misicpod, BlueRecorder, Flameshot, Bottles, ProtonPlus, Clapgrep, Filelight,
+ # Flatseal, Gearlever, Gimp, Photoolibre, Protontricks, Warehouse, WineZGUI, NotepadNext, Termius.
  # The system checks whether Flatpak is installed. If not, it is installed.
  # The system checks whether the Flatpak apps to be installed are already installed via Snap or Native. If yes, the installation of the respective Flatpak app is skipped.
  # Warnings that are only informative and have no influence on the function of the respective app, e.g. because KDE is used instead of Gnome, are hidden.
@@ -124,7 +122,6 @@
  FLATPAK_APPS=(
    "com.discordapp.Discord"
    "org.gimp.GIMP"
-   "com.abisource.AbiWord"
    "org.blender.Blender"
    "org.kde.kdenlive"
    "com.obsproject.Studio"
@@ -132,17 +129,16 @@
    "org.flameshot.Flameshot"
    "com.usebottles.bottles"
    "com.vysp3r.ProtonPlus"
-   "io.github.dvlv.boxbuddyrs"
    "de.leopoldluley.Clapgrep"
    "org.kde.filelight"
    "com.github.tchx84.Flatseal"
    "it.mijorus.gearlever"
-   "org.gimp.GIMP"
    "me.ahola.aphototoollibre"
    "com.github.Matoking.protontricks"
    "io.github.flattool.Warehouse"
    "io.github.fastrizwaan.WineZGUI"
    "com.github.dail8859.NotepadNext"
+   "com.termius.Termius"
  )
  
  for app in "${FLATPAK_APPS[@]}"; do
