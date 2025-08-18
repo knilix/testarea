@@ -1,7 +1,7 @@
 #!/bin/bash
 # Universelles automatisches Update für Docker-Compose Services
 # Unterstützt: Alpine Linux, Debian, Ubuntu
-# Release_V2.0.2
+# Release_V2.0.3
 # Dateipfad: /opt/scriptfiles/updatescript.sh
 # Log-Pfad: /opt/scriptfiles/log/
 
@@ -179,6 +179,11 @@ main() {
         reboot
     fi
 }
+
+# Aufräumen
+ echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
+ rm -r /opt/scriptfiles/testarea-main 2>/dev/null
+ rm /opt/main.zip 2>/dev/null
 
 # Script ausführen
 main "$@"
