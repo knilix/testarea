@@ -9,20 +9,38 @@ mkdir -p /opt/scriptfiles
 touch /opt/scriptfiles/updatescript.sh
 touch /opt/scriptfiles/updatelog.txt
 #
-echo '#!/bin/bash' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'echo d=$(date +%y-%m-%d_%H:%M:%S) | tee -a /opt/scriptfiles/updatelog.txt' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'apt-get update -y' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'apt-get upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
-echo 'apt-get dist-upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
+### OLD #########################################################################
+#echo '#!/bin/bash' | tee -a /opt/scriptfiles/updatescript.sh
+#echo 'echo d=$(date +%y-%m-%d_%H:%M:%S) | tee -a /opt/scriptfiles/updatelog.txt' | tee -a /opt/scriptfiles/updatescript.sh
+#echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh
+#echo 'apt-get update -y' | tee -a /opt/scriptfiles/updatescript.sh
+#echo 'apt-get upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
+#echo 'apt-get dist-upgrade -y' | tee -a /opt/scriptfiles/updatescript.sh
+##
+#echo 'new_kernel=$(uname -r)
+##  pruefen, ob sich die Kernel-Version geaendert hat
+#if [ "$old_kernel" != "$new_kernel" ]; then
+#    reboot
+#else
+#    exit
+#fi'| tee -a /opt/scriptfiles/updatescript.sh
+#################################################################################
 #
-echo 'new_kernel=$(uname -r)
-#  pruefen, ob sich die Kernel-Version geaendert hat
-if [ "$old_kernel" != "$new_kernel" ]; then
-    reboot
-else
-    exit
-fi'| tee -a /opt/scriptfiles/updatescript.sh
+### NEW #########################################################################
+echo '#!/bin/bash' | tee /opt/scriptfiles/updatescript.sh
+echo 'LOGFILE="/opt/scriptfiles/updatelog.txt"' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'echo "$(date +%y-%m-%d_%H:%M:%S) - Update gestartet" >> $LOGFILE' | tee -a /opt/scriptfiles/updatescript.sh
+
+echo 'apt-get update -qq >> $LOGFILE 2>&1' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'apt-get upgrade -y -qq >> $LOGFILE 2>&1' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'apt-get dist-upgrade -y -qq >> $LOGFILE 2>&1' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'apt-get autoremove -y -qq >> $LOGFILE 2>&1' | tee -a /opt/scriptfiles/updatescript.sh
+
+echo 'if apt list --upgradable 2>/dev/null | grep -q "linux-image"; then' | tee -a /opt/scriptfiles/updatescript.sh
+echo '    echo "$(date +%y-%m-%d_%H:%M:%S) - Kernel-Update installiert, Neustart" >> $LOGFILE' | tee -a /opt/scriptfiles/updatescript.sh
+echo '    reboot' | tee -a /opt/scriptfiles/updatescript.sh
+echo 'fi' | tee -a /opt/scriptfiles/updatescript.sh
+#################################################################################
 #
 chmod 700 /opt/scriptfiles/updatescript.sh
 #
