@@ -1,7 +1,7 @@
 #!/bin/bash
 # Universelles automatisches Update für Docker-Compose Services
 # Unterstützt: Alpine Linux, Debian, Ubuntu
-# Release_V2.0.3
+# Release_V2.0.5
 # Dateipfad: /opt/scriptfiles/updatescript.sh
 # Log-Pfad: /opt/scriptfiles/log/
 
@@ -15,6 +15,22 @@ log_message() {
     mkdir -p "$log_dir"
     
     echo "$(date +%y-%m-%d_%H:%M:%S) - $1" | tee -a "$log_file"
+}
+
+# Prüfe ob Docker installiert ist
+check_docker() {
+    if ! command -v docker &> /dev/null; then
+        log_message "Docker ist nicht installiert - überspringe Docker-bezogene Aktionen"
+        return 1
+    fi
+    
+    # Prüfe ob Docker läuft
+    if ! docker info &> /dev/null; then
+        log_message "Docker-Daemon läuft nicht - überspringe Docker-bezogene Aktionen"
+        return 1
+    fi
+    
+    return 0
 }
 
 # OS-Erkennung
@@ -72,6 +88,11 @@ update_system() {
 
 # Docker-Compose Services updaten
 update_docker_services() {
+    # Prüfe Docker-Installation
+    if ! check_docker; then
+        return
+    fi
+    
     # Prüfe ob Docker-Volumes-Verzeichnis existiert
     if [ ! -d "/opt/dockervolumes" ]; then
         log_message "/opt/dockervolumes existiert nicht - überspringe Docker-Compose Updates"
@@ -143,13 +164,34 @@ update_docker_services() {
     done
 }
 
-# Cleanup
+# Docker Cleanup
 cleanup_docker() {
+    # Prüfe Docker-Installation
+    if ! check_docker; then
+        return
+    fi
+    
     log_message "Führe Docker-Cleanup durch"
     docker image prune -f || true
     docker container prune -f || true
     docker volume prune -f || true
     docker network prune -f || true
+}
+
+# Cleanup temporärer Dateien
+cleanup_temp_files() {
+    log_message "Bereinige temporäre Dateien..."
+    rm -rf /opt/scriptfiles/testarea-main 2>/dev/null || true
+    rm -f /opt/main.zip 2>/dev/null || true
+}
+
+# Cleanup alter Log-Dateien
+cleanup_old_logs() {
+    local log_dir="/opt/scriptfiles/log"
+    if [ -d "$log_dir" ]; then
+        log_message "Bereinige alte Log-Dateien (älter als 12 Monate)"
+        find "$log_dir" -name "updatelog_*.txt" -type f -mtime +365 -delete 2>/dev/null || true
+    fi
 }
 
 # Main Script
@@ -164,11 +206,19 @@ main() {
     update_system "$OS_TYPE"
     KERNEL_UPDATE=$?
     
-    # Docker-Services updaten
+    # Docker-Services updaten (nur wenn Docker verfügbar ist)
     update_docker_services
     
-    # Cleanup
+    # Docker Cleanup (nur wenn Docker verfügbar ist)
     cleanup_docker
+    
+    # Temporäre Dateien aufräumen
+    cleanup_temp_files
+    
+    # Cleanup alter Logs beim ersten Lauf des Monats
+    if [ "$(date +%d)" = "01" ]; then
+        cleanup_old_logs
+    fi
     
     log_message "=== Docker Update Script beendet ==="
     
@@ -180,23 +230,5 @@ main() {
     fi
 }
 
-# Aufräumen
- echo -e "${GRAY}Bereinige temporäre Dateien...${NC}"
- rm -r /opt/scriptfiles/testarea-main 2>/dev/null
- rm /opt/main.zip 2>/dev/null
-
 # Script ausführen
 main "$@"
-
-# Optional: Alte Log-Dateien bereinigen (älter als 12 Monate)
-cleanup_old_logs() {
-    local log_dir="/opt/scriptfiles/log"
-    if [ -d "$log_dir" ]; then
-        find "$log_dir" -name "updatelog_*.txt" -type f -mtime +365 -delete 2>/dev/null || true
-    fi
-}
-
-# Cleanup alter Logs beim ersten Lauf des Monats
-if [ "$(date +%d)" = "01" ]; then
-    cleanup_old_logs
-fi
