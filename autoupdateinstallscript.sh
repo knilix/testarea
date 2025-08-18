@@ -1,9 +1,9 @@
 #!/bin/bash
 # Universelles automatisches Update für Docker-Compose Services
 # Unterstützt: Alpine Linux, Debian, Ubuntu
-# Release_V2.0.1
-# Dateipfad: ~/scriptfiles/updatescript.sh
-# Logfile: /opt/scriptfiles/updatelog.txt
+# Release_V2.0.2
+# Dateipfad: /opt/scriptfiles/updatescript.sh
+# Log-Pfad: /opt/scriptfiles/log/
 
 # Logging-Funktion mit monatlichen Log-Dateien
 log_message() {
