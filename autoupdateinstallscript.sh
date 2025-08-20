@@ -1,234 +1,163 @@
 #!/bin/bash
-# Universelles automatisches Update für Docker-Compose Services
-# Unterstützt: Alpine Linux, Debian, Ubuntu
-# Release_V2.0.5
-# Dateipfad: /opt/scriptfiles/updatescript.sh
-# Log-Pfad: /opt/scriptfiles/log/
+# Maintainer: @knilix
+# Only test - Final Version!
+# For Debian/Ubuntu & Alpine Linux
+# V4.0.1
+# Startscript: wget -q -P /opt/ https://github.com/knilix/testareaalpine/archive/refs/heads/main.zip && unzip /opt/main.zip -d /opt/scriptfiles && chmod 700 /opt/scriptfiles/testareaalpine-main/install_updatescript.sh
+# Ausführbefehl (einmalig): cd && cd /opt/scriptfiles/testareaalpine-main && ./install_updatescript.sh
 
-# Logging-Funktion mit monatlichen Log-Dateien
-log_message() {
-    local log_dir="/opt/scriptfiles/log"
-    local current_month=$(date +%y-%m)
-    local log_file="$log_dir/updatelog_$current_month.txt"
-    
-    # Erstelle Log-Verzeichnis falls nicht vorhanden
-    mkdir -p "$log_dir"
-    
-    echo "$(date +%y-%m-%d_%H:%M:%S) - $1" | tee -a "$log_file"
-}
+cd
 
-# Prüfe ob Docker installiert ist
-check_docker() {
-    if ! command -v docker &> /dev/null; then
-        log_message "Docker ist nicht installiert - überspringe Docker-bezogene Aktionen"
-        return 1
-    fi
-    
-    # Prüfe ob Docker läuft
-    if ! docker info &> /dev/null; then
-        log_message "Docker-Daemon läuft nicht - überspringe Docker-bezogene Aktionen"
-        return 1
-    fi
-    
-    return 0
-}
+#==============================================================================
+# VORBEREITUNG: Ordnerstruktur und Basis-Setup
+#==============================================================================
 
-# OS-Erkennung
-detect_os() {
-    if [ -f /etc/alpine-release ]; then
-        echo "alpine"
-    elif [ -f /etc/debian_version ]; then
-        if grep -qi ubuntu /etc/os-release 2>/dev/null; then
-            echo "ubuntu"
-        else
-            echo "debian"
-        fi
-    else
-        echo "unknown"
-    fi
-}
+# Ordnerstruktur anlegen
+mkdir -p /opt/scriptfiles
 
-# System-Update basierend auf OS
-update_system() {
-    local os_type=$1
-    local kernel_update=0
-    
-    case $os_type in
-        "alpine")
-            log_message "Alpine Linux erkannt - führe apk update/upgrade durch"
-            apk update || true
-            apk upgrade || true
-            # Kernel-Update-Check für Alpine
-            if apk info -v | grep -q '^linux-lts\|^linux-virt'; then
-                kernel_update=1
-            fi
-            ;;
-        "debian"|"ubuntu")
-            log_message "$os_type erkannt - führe apt update/upgrade durch"
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update || true
-            apt-get upgrade -y || true
-            apt-get autoremove -y || true
-            apt-get autoclean || true
-            # Kernel-Update-Check für Debian/Ubuntu
-            if dpkg -l | grep -q "^ii.*linux-image.*$(uname -r)"; then
-                # Prüfe ob ein neuerer Kernel verfügbar ist
-                if apt list --upgradable 2>/dev/null | grep -q linux-image; then
-                    kernel_update=1
-                fi
-            fi
-            ;;
-        *)
-            log_message "Unbekanntes Betriebssystem - überspringe System-Update"
-            ;;
-    esac
-    
-    return $kernel_update
-}
+#==============================================================================
+# UPDATESCRIPT ERSTELLEN: Haupt-Update-Logik
+#==============================================================================
 
-# Docker-Compose Services updaten
-update_docker_services() {
-    # Prüfe Docker-Installation
-    if ! check_docker; then
-        return
-    fi
-    
-    # Prüfe ob Docker-Volumes-Verzeichnis existiert
-    if [ ! -d "/opt/dockervolumes" ]; then
-        log_message "/opt/dockervolumes existiert nicht - überspringe Docker-Compose Updates"
-        return
-    fi
-    
-    log_message "Starte Docker-Compose Updates"
-    
-    # Wechsle in Docker-Volumes-Verzeichnis
-    cd /opt/dockervolumes || {
-        log_message "FEHLER: Kann nicht nach /opt/dockervolumes wechseln"
-        return
-    }
-    
-    # Finde alle docker-compose Dateien
-    readarray -d '' composeConfigs < <(find . -type f \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) -print0)
-    
-    if [ ${#composeConfigs[@]} -eq 0 ]; then
-        log_message "Keine docker-compose Dateien gefunden"
-        return
-    fi
-    
-    log_message "Gefundene docker-compose Dateien: ${#composeConfigs[@]}"
-    
-    for cfg in "${composeConfigs[@]}"; do
-        log_message "Verarbeite: $cfg"
-        
-        # Pull neue Images
-        timeout 600s docker compose -f "$cfg" pull || {
-            log_message "WARNUNG: Pull fehlgeschlagen für $cfg"
-            continue
-        }
-        
-        # Starte Services neu
-        timeout 600s docker compose -f "$cfg" up -d || {
-            log_message "WARNUNG: Up fehlgeschlagen für $cfg"
-            continue
-        }
-        
-        # Health-Check für alle Services
-        services=$(docker compose -f "$cfg" ps --services 2>/dev/null || true)
-        if [ -n "$services" ]; then
-            for service in $services; do
-                log_message "Prüfe Health-Status für Service: $service"
-                container_id=$(docker compose -f "$cfg" ps -q "$service" 2>/dev/null)
-                
-                if [ -n "$container_id" ]; then
-                    # Warte bis zu 60 Sekunden auf healthy Status
-                    for i in $(seq 1 12); do
-                        health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_id" 2>/dev/null || echo "no-health-check")
-                        
-                        if [ "$health_status" = "healthy" ] || [ "$health_status" = "no-health-check" ]; then
-                            log_message "Service $service ist bereit (Status: $health_status)"
-                            break
-                        elif [ "$health_status" = "unhealthy" ]; then
-                            log_message "WARNUNG: Service $service ist unhealthy"
-                            break
-                        fi
-                        
-                        if [ $i -eq 12 ]; then
-                            log_message "WARNUNG: Service $service wurde nicht rechtzeitig healthy"
-                        fi
-                        
-                        sleep 5
-                    done
-                fi
-            done
-        fi
-    done
-}
+# Script-Header und Logging-Setup
+echo '#!/bin/bash' | tee /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'LOG_DIR="/opt/scriptfiles/log"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'mkdir -p "$LOG_DIR"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'LOGFILE="$LOG_DIR/update_$(date +%Y-%m).log"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Update gestartet" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
 
-# Docker Cleanup
-cleanup_docker() {
-    # Prüfe Docker-Installation
-    if ! check_docker; then
-        return
-    fi
-    
-    log_message "Führe Docker-Cleanup durch"
-    docker image prune -f || true
-    docker container prune -f || true
-    docker volume prune -f || true
-    docker network prune -f || true
-}
+# Kernel-Update Überwachung initialisieren
+echo '# Flag für Kernel-Update' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'KERNEL_UPDATE=0' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'old_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
 
-# Cleanup temporärer Dateien
-cleanup_temp_files() {
-    log_message "Bereinige temporäre Dateien..."
-    rm -rf /opt/scriptfiles/testarea-main 2>/dev/null || true
-    rm -f /opt/main.zip 2>/dev/null || true
-}
+# System-Updates: Paketmanager-spezifische Update-Logik
+echo '# Check if running on Alpine, Debian, or Ubuntu' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'if command -v apk >/dev/null 2>&1; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    # Alpine Linux' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apk update >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apk upgrade -a >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apk cache clean >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - System Updates beendet (Alpine)" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'elif command -v apt-get >/dev/null 2>&1; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    # Debian/Ubuntu' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apt-get update >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apt-get upgrade -y >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apt-get autoremove -y >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    apt-get autoclean >/dev/null 2>&1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - System Updates beendet (Debian/Ubuntu)" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'else' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Kein unterstütztes Paketmanagementsystem gefunden" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    exit 1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'fi' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
 
-# Cleanup alter Log-Dateien
-cleanup_old_logs() {
-    local log_dir="/opt/scriptfiles/log"
-    if [ -d "$log_dir" ]; then
-        log_message "Bereinige alte Log-Dateien (älter als 12 Monate)"
-        find "$log_dir" -name "updatelog_*.txt" -type f -mtime +365 -delete 2>/dev/null || true
+# Kernel-Update Erkennung
+echo '# Prüfen, ob ein Kernel-Update installiert wurde' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'new_kernel=$(uname -r)' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'if [ "$old_kernel" != "$new_kernel" ]; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Kernel-Update installiert, Neustart wird durchgefuehrt" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Kernel-Update erkannt - Neustart erforderlich" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    KERNEL_UPDATE=1' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'else' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Kernel-Ueberpruefung beendet (kein Update)" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'fi' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+
+# Docker-Compose Updates: Container-Updates verwalten
+echo '# Update Docker-Compose if /opt/dockervolumes exists' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'if [ -d "/opt/dockervolumes" ] && command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Docker-Compose-Update gestartet" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    cd /opt/dockervolumes' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    readarray -d "" composeConfigs < <(find . -type f -name "docker-compose.y*" -print0)' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    if [ ${#composeConfigs[@]} -eq 0 ]; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '        echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Keine docker-compose.y* Dateien gefunden" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    else' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '        for cfg in "${composeConfigs[@]}"; do' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '            echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Docker-Compose Pull für $cfg durchgefuehrt" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '            docker compose -f "$cfg" pull >> "$LOGFILE" 2>&1 || echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Fehler beim Pull von $cfg" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '            docker compose -f "$cfg" up -d >> "$LOGFILE" 2>&1 || echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Fehler beim Up von $cfg" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '        done' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    fi' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    # Alte Images automatisch löschen' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    docker image prune -f >> "$LOGFILE" 2>&1 || echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Fehler beim Bereinigen alter Docker-Images" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Docker-Compose-Update abgeschlossen" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'elif [ -d "/opt/dockervolumes" ]; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Docker oder docker compose nicht verfügbar" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'else' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Docker Updates uebersprungen (Kein /opt/dockervolumes Verzeichnis)" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'fi' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+
+# Wartung: Alte Logs und temporäre Dateien bereinigen
+echo '# Delete log files older than 6 months' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'find "$LOG_DIR" -name "update_*.log" -mtime +180 -delete' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Log-Bereinigung beendet" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '# Log completion' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Update abgeschlossen" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '# Delete temporary installation files' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'rm -r /opt/scriptfiles/testareaalpine-main 2>/dev/null' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'rm /opt/main.zip 2>/dev/null' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "$(date '\''+%Y-%m-%d %H:%M:%S'\'') - Temporaere Dateien bereinigt" >> "$LOGFILE"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+
+# Benutzer-Information: Status und Verwendungshinweise ausgeben
+echo '# Final output' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'clear' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo ""' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "================================================="' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "           UPDATE ABGESCHLOSSEN"' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo "================================================="' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'echo ""' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'if [ $KERNEL_UPDATE -eq 1 ]; then' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo '    reboot' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+echo 'fi' | tee -a /opt/scriptfiles/updatescript.sh >/dev/null
+
+#==============================================================================
+# FINALISIERUNG: Rechte setzen und Script ausführen
+#==============================================================================
+
+# Rechte setzen
+chmod 700 /opt/scriptfiles/updatescript.sh
+
+# Skript einmalig ausführen
+cd /opt/scriptfiles
+{
+    if ! ./updatescript.sh; then
+        echo "$(date): Fehler beim Ausführen von updatescript.sh (Exit-Code: $?)" >&2
     fi
 }
 
-# Main Script
-main() {
-    log_message "=== Start Universal Docker Update Script ==="
-    
-    # OS erkennen
-    OS_TYPE=$(detect_os)
-    log_message "Erkanntes Betriebssystem: $OS_TYPE"
-    
-    # System-Update
-    update_system "$OS_TYPE"
-    KERNEL_UPDATE=$?
-    
-    # Docker-Services updaten (nur wenn Docker verfügbar ist)
-    update_docker_services
-    
-    # Docker Cleanup (nur wenn Docker verfügbar ist)
-    cleanup_docker
-    
-    # Temporäre Dateien aufräumen
-    cleanup_temp_files
-    
-    # Cleanup alter Logs beim ersten Lauf des Monats
-    if [ "$(date +%d)" = "01" ]; then
-        cleanup_old_logs
-    fi
-    
-    log_message "=== Docker Update Script beendet ==="
-    
-    # Neustart falls Kernel-Update
-    if [ $KERNEL_UPDATE -eq 1 ]; then
-        log_message "Kernel-Update erkannt - System wird neugestartet"
-        sleep 5
-        reboot
-    fi
-}
+#==============================================================================
+# AUFRÄUMEN: Temporäre Dateien entfernen
+#==============================================================================
 
-# Script ausführen
-main "$@"
+# Temporäre Installationsdateien löschen
+rm -r /opt/scriptfiles/testareaalpine-main 2>/dev/null
+rm /opt/main.zip 2>/dev/null
+
+#==============================================================================
+# ABSCHLUSS: Benutzerinformation anzeigen
+#==============================================================================
+
+clear
+echo ""
+echo "================================================="
+echo "        INSTALLATION ABGESCHLOSSEN"
+echo "================================================="
+echo ""
+echo "✓ Das Updatescript wurde erstellt"
+echo "✓ Nicht mehr benötigte Installationsdateien wurden gelöscht"
+echo ""
+echo "Für automatische Updates (täglich um 02:10 Uhr):"
+echo "crontab -e"
+echo "10 2 * * * /opt/scriptfiles/updatescript.sh >/dev/null 2>&1"
+echo ""
+echo "Manueller Startbefehl:"
+echo "cd /opt/scriptfiles && ./updatescript.sh"
+echo ""
